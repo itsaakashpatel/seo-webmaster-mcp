@@ -1,0 +1,53 @@
+{
+  "name": "@itsaakashpatel/seo-webmaster-mcp",
+  "version": "1.0.0",
+  "description": "Unified SEO & Webmaster MCP server for Google Search Console, Bing Webmaster Tools, and IndexNow",
+  "mcpName": "io.github.itsaakashpatel/seo-webmaster",
+  "main": "build/index.js",
+  "bin": {
+    "seo-webmaster-mcp": "build/index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsc && chmod +x build/index.js",
+    "dev": "tsc --watch",
+    "prepare": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsaakashpatel/seo-webmaster-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "seo",
+    "webmaster",
+    "google-search-console",
+    "gsc",
+    "bing-webmaster",
+    "indexnow",
+    "search-analytics",
+    "url-inspection",
+    "sitemaps",
+    "claude",
+    "cursor",
+    "ai"
+  ],
+  "author": "Aakash Patel",
+  "license": "MIT",
+  "files": [
+    "build",
+    "server.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "googleapis": "^181.0.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

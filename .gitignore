@@ -1,0 +1,17 @@
+node_modules/
+build/
+dist/
+*.log
+.DS_Store
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.json.key
+*service-account*.json
+*credentials*.json
+*client_secret*.json
+gsc-key*.json
+secrets/
+.mcpregistry_*

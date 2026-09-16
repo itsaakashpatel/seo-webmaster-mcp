@@ -1,0 +1,50 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.itsaakashpatel/seo-webmaster",
+  "description": "Unified SEO & Webmaster MCP server for Google Search Console, Bing Webmaster Tools, and IndexNow",
+  "repository": {
+    "url": "https://github.com/itsaakashpatel/seo-webmaster-mcp",
+    "source": "github"
+  },
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@itsaakashpatel/seo-webmaster-mcp",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "GOOGLE_APPLICATION_CREDENTIALS",
+          "description": "Path to Google Cloud service account JSON key file",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "GOOGLE_SERVICE_ACCOUNT_KEY",
+          "description": "Raw JSON or base64 string of the Google Cloud service account key",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "BING_WEBMASTER_API_KEY",
+          "description": "API key for Bing Webmaster Tools",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "INDEXNOW_KEY",
+          "description": "Key for IndexNow instant URL submission",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
