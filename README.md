@@ -1,51 +1,167 @@
-# SEO & Webmaster MCP Server
+# seo-webmaster-mcp
 
 [![MCP](https://img.shields.io/badge/Model%20Context%20Protocol-Compatible-blue.svg)](https://modelcontextprotocol.io/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A unified **Model Context Protocol (MCP)** server providing AI assistants (Claude Desktop, Claude Code, Cursor, Windsurf, Cline, Zed, etc.) with comprehensive, read-only search performance data and instant indexing across **Google Search Console**, **Google Indexing API**, **Bing Webmaster Tools**, and **IndexNow**.
+A unified **Model Context Protocol (MCP)** server providing AI assistants (**Claude Desktop**, **Claude Code**, **Cursor**, **Windsurf**, **Cline**, **Zed**, etc.) with comprehensive organic search analytics, URL inspection, sitemap health monitoring, and instant search engine indexing across **Google Search Console**, **Google Indexing API**, **Bing Webmaster Tools**, and **IndexNow**.
 
 ---
 
-## Why SEO Webmaster MCP?
+## 🚀 Quickstart (Running in 2 Minutes)
 
-Most search console tools are single-engine only. **SEO Webmaster MCP** unifies your search presence under a provider architecture:
+You do **not** need to configure all engines. **All engines are completely optional!**
+- If you only have Google Search Console, only configure Google.
+- If you only have Bing Webmaster Tools, only configure Bing.
+- If you want instant indexing without API keys, you can use IndexNow.
+- If you configure nothing, start the server and ask your AI: *"Check engine status"* to see step-by-step setup guides!
 
-- 🌐 **Cross-Engine Search Visibility** — Query organic performance (clicks, impressions, CTR, position) across Google and Bing with unified dimension breakdowns.
-- ⚡ **Instant Indexing via IndexNow** — Instantly notify Bing, Yandex, Seznam, and Naver whenever URLs are published, updated, or removed.
-- 🔍 **Google Indexing API** — Push up to 200 URLs/day to Google (`URL_UPDATED` / `URL_DELETED`). Only JobPosting or BroadcastEvent-in-VideoObject pages are eligible.
-- 🔍 **In-Depth URL Inspection** — Check real-time indexing status, crawl info, canonical URL tags, mobile usability issues, and rich results schema validation.
-- 🗺️ **Sitemap Health Monitoring** — Track sitemaps submitted across engines, check last crawl dates, and monitor indexed vs. submitted URLs.
-- 🛡️ **Safe & Extensible** — Read-only search analytics scopes protect your properties from unintended changes, while IndexNow handles fast discovery. Google Indexing uses the separate `https://www.googleapis.com/auth/indexing` scope.
+### Option A: Run via `npx` (Recommended)
+
+No cloning required. Your MCP client will download and run the latest version automatically.
+
+#### 1. Claude Desktop
+Add to your `claude_desktop_config.json`:
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "seo-webmaster": {
+      "command": "npx",
+      "args": ["-y", "@itsaakashpatel/seo-webmaster-mcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/gsc-key.json",
+        "BING_WEBMASTER_API_KEY": "your_bing_api_key",
+        "INDEXNOW_KEY": "your_indexnow_key"
+      }
+    }
+  }
+}
+```
+
+#### 2. Cursor
+Add to `.cursor/mcp.json` (project-level) or **Cursor Settings → Features → MCP Servers**:
+
+```json
+{
+  "mcpServers": {
+    "seo-webmaster": {
+      "command": "npx",
+      "args": ["-y", "@itsaakashpatel/seo-webmaster-mcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/gsc-key.json",
+        "BING_WEBMASTER_API_KEY": "your_bing_api_key",
+        "INDEXNOW_KEY": "your_indexnow_key"
+      }
+    }
+  }
+}
+```
+
+#### 3. Claude Code CLI
+Add to `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "seo-webmaster": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@itsaakashpatel/seo-webmaster-mcp"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/your/gsc-key.json",
+        "BING_WEBMASTER_API_KEY": "your_bing_api_key",
+        "INDEXNOW_KEY": "your_indexnow_key"
+      }
+    }
+  }
+}
+```
 
 ---
 
-## Available Tools
+## 🛠️ Step-by-Step Setup Guide
 
-| Tool | Description |
-|---|---|
-| `engine_status` | Check the connection and configuration status of Google, Bing, IndexNow, and Google Indexing API providers with actionable setup guides. |
-| `list_sites` | List verified properties across Google Search Console and Bing Webmaster Tools with user roles/permissions. |
-| `search_analytics` | Query clicks, impressions, CTR, and average position grouped by queries, pages, countries, devices, and dates. |
-| `inspect_url` | Inspect a URL for live indexing status, crawl timestamp, canonical checks, mobile usability, and schema markup. |
-| `list_sitemaps` | List submitted sitemaps, error/warning counts, and submitted vs indexed URL counts. |
-| `get_sitemap` | Retrieve deep indexing statistics for a specific sitemap feed. |
-| `submit_urls_indexnow` | Instantly submit up to 10,000 URLs to Bing and partner engines using the IndexNow protocol. |
-| `submit_urls_google` | Notify Google via the Indexing API (max 200 URLs/call, ~200/day quota; JobPosting / BroadcastEvent pages only). |
+### 1. Google Search Console & Google Indexing API
+
+> [!TIP]
+> Both Search Console and Indexing API use the **exact same** service account credentials.
+
+1. **Create a Cloud Project**: Go to [Google Cloud Console](https://console.cloud.google.com/) and create a project (e.g. `my-seo-tools`).
+2. **Enable APIs**:
+   - In **APIs & Services → Library**, search for **Google Search Console API** and click **Enable**.
+   - *(Optional for instant Google push)* Search for **Indexing API** (`indexing.googleapis.com`) and click **Enable**.
+3. **Create Service Account**:
+   - Go to **APIs & Services → Credentials → Create Credentials → Service Account**.
+   - Name it (e.g. `gsc-reader`), click **Create and Continue**, then **Done**.
+4. **Generate JSON Key File**:
+   - Click on the created service account email.
+   - Go to the **Keys** tab → **Add Key → Create new key → JSON**.
+   - Save the downloaded file somewhere safe on your computer (e.g., `~/.config/gcloud/gsc-key.json`).
+5. **Grant Property Access in Search Console**:
+   - Copy the service account's email address (e.g. `gsc-reader@my-seo-tools.iam.gserviceaccount.com`).
+   - Open [Google Search Console](https://search.google.com/search-console).
+   - Select your property → **Settings** (bottom left) → **Users and permissions** → **Add user**.
+   - Paste the service account email:
+     - For read-only search analytics: select **Restricted** or **Full**.
+     - If using Google Indexing API: select **Owner** (required by Google to publish indexing requests).
+6. **Set Environment Variable**:
+   - Set `GOOGLE_APPLICATION_CREDENTIALS` to the absolute path of your downloaded JSON file.
+   - Alternatively, you can paste the raw JSON string or base64 into `GOOGLE_SERVICE_ACCOUNT_KEY`.
+
+---
+
+### 2. Bing Webmaster Tools
+
+1. Sign in to [Bing Webmaster Tools](https://www.bing.com/webmasters) and ensure your site is verified.
+2. Click the **Settings** gear icon (top right) → **API Access** → **API Key**.
+3. Generate an API Key and copy it.
+4. Set the `BING_WEBMASTER_API_KEY` environment variable in your MCP configuration.
+
+---
+
+### 3. IndexNow (Instant Indexing to Bing, Yandex, Seznam, Naver)
+
+IndexNow allows search engines to instantly discover updated, new, or deleted URLs without waiting for crawlers.
+
+1. **Generate a Key**: Create a random 32-character hexadecimal key (or use [Bing's Key Generator](https://www.bing.com/indexnow)).
+2. **Host the Verification File**:
+   - Place a text file named `<your-key>.txt` containing only the key at your website root:
+     `https://example.com/<your-key>.txt`
+   - Confirm it opens in your browser and displays only the key string.
+3. **Set Environment Variable**:
+   - Set `INDEXNOW_KEY` to your key string.
+   - *(Optional)* If your key file is hosted in a subfolder or custom URL, set `INDEXNOW_KEY_LOCATION` to the full URL (e.g. `https://example.com/assets/my-key.txt`).
+
+---
+
+## 🧰 Available MCP Tools
+
+| Tool | Engine | Description |
+|---|:---:|---|
+| [`engine_status`](#1-engine_status) | All | Check connection and configuration health across all 4 search engine providers with setup tips. |
+| [`list_sites`](#2-list_sites) | Google & Bing | List all verified website properties with user permissions/roles. |
+| [`search_analytics`](#3-search_analytics) | Google & Bing | Query clicks, impressions, CTR, and average position grouped by query, page, country, device, and date. |
+| [`inspect_url`](#4-inspect_url) | Google & Bing | Inspect live URL index status, crawl dates, canonical tags, mobile usability, and rich results schema. |
+| [`list_sitemaps`](#5-list_sitemaps) | Google & Bing | List submitted sitemaps, error/warning counts, crawl timestamps, and indexed URL breakdown. |
+| [`get_sitemap`](#6-get_sitemap) | Google & Bing | Retrieve deep indexing statistics for a specific sitemap feed. |
+| [`submit_urls_indexnow`](#7-submit_urls_indexnow) | IndexNow | Instantly notify Bing, Yandex, and partner engines about up to 10,000 published/updated/deleted URLs. |
+| [`submit_urls_google`](#8-submit_urls_google) | Google Indexing | Push up to 200 URLs/day to Google via the Indexing API (`URL_UPDATED` or `URL_DELETED`). |
 
 <details>
 <summary><strong>Detailed Parameter Reference</strong></summary>
 
-### 1. <code>engine_status</code>
+### 1. `engine_status`
 No parameters required.
 
-### 2. <code>list_sites</code>
+### 2. `list_sites`
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `engine` | string | No | Filter by engine: `all`, `google`, or `bing` (default: `all`) |
 
-### 3. <code>search_analytics</code>
+### 3. `search_analytics`
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `siteUrl` | string | **Yes** | Site URL as verified in Search Console (e.g. `https://example.com/` or `sc-domain:example.com`) |
@@ -62,165 +178,84 @@ No parameters required.
 | `deviceFilter` | string | No | `DESKTOP`, `MOBILE`, or `TABLET` |
 | `startRow` | number | No | Pagination row offset (default: `0`) |
 
-### 4. <code>inspect_url</code>
+### 4. `inspect_url`
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `siteUrl` | string | **Yes** | Site URL as verified in Search Console |
 | `inspectionUrl` | string | **Yes** | Fully qualified URL to inspect |
 | `engine` | string | No | `google` or `bing` (default: `google`) |
-| `languageCode` | string | No | Language code for localized messages (e.g. `en-US`) |
+| `languageCode` | string | No | Language code for localized messages (default: `en-US`) |
 
-### 5. <code>list_sitemaps</code>
+### 5. `list_sitemaps`
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `siteUrl` | string | **Yes** | Site URL as verified in Search Console |
 | `engine` | string | No | `google` or `bing` (default: `google`) |
 
-### 6. <code>get_sitemap</code>
+### 6. `get_sitemap`
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `siteUrl` | string | **Yes** | Site URL as verified in Search Console |
 | `feedpath` | string | **Yes** | Full URL or path to the sitemap feed |
 | `engine` | string | No | `google` or `bing` (default: `google`) |
 
-### 7. <code>submit_urls_indexnow</code>
+### 7. `submit_urls_indexnow`
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `host` | string | **Yes** | Domain name without protocol (e.g. `example.com`) |
-| `urls` | string | **Yes** | Comma-separated or newline-separated list of full URLs (or JSON array) |
+| `urls` | string | **Yes** | Comma/newline-separated list of full URLs (or JSON array) |
 | `key` | string | No | IndexNow key (optional if `INDEXNOW_KEY` env var is set) |
 | `keyLocation` | string | No | Full URL to key file if hosted in custom location |
 
-### 8. <code>submit_urls_google</code>
+### 8. `submit_urls_google`
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `urls` | string | **Yes** | Comma/newline-separated full https URLs (or JSON array). Max 200 per call |
 | `type` | string | No | `URL_UPDATED` (new/changed) or `URL_DELETED` (removed). Default: `URL_UPDATED` |
 
-> Google limits: only pages with JobPosting or BroadcastEvent-in-VideoObject structured data are eligible. Default quota is 200 publish requests/day. A 200 response means Google may recrawl soon; 429 means quota exhausted.
+> **Google Indexing API note**: Only pages containing `JobPosting` or `BroadcastEvent` (in `VideoObject`) structured data are supported by Google. Default daily quota is 200 requests.
 
 </details>
 
 ---
 
-## Authentication & Setup
+## 💬 Example AI Assistant Prompts
 
-You can configure any or all of the supported engines:
+Once configured in Claude or Cursor, you can interact with your search data in plain English:
 
-### 1. Google Search Console
-
-1. In the [Google Cloud Console](https://console.cloud.google.com/), create a project (or select an existing one).
-2. Go to **APIs & Services** → **Library**, search for **Google Search Console API**, and click **Enable**.
-3. Repeat step 2 for the **Indexing API** (`indexing.googleapis.com`) if you use `submit_urls_google`.
-4. Go to **APIs & Services** → **Credentials** → **Create Credentials** → **Service Account**.
-5. Give it a name (e.g., `gsc-mcp-reader`) and complete the creation.
-6. Click on the service account → **Keys** tab → **Add Key** → **Create new key** → **JSON**.
-7. Save the downloaded JSON key file securely on your computer (e.g., `~/.config/gcloud/gsc-key.json`).
-8. Copy the service account's email address (e.g. `gsc-mcp-reader@project.iam.gserviceaccount.com`).
-9. In [Google Search Console](https://search.google.com/search-console), select your property → **Settings** → **Users and permissions** → **Add user**.
-10. Paste the service account email and grant **Owner** (required for Indexing API) or at least **Full** permission. Verify ownership of every domain you submit via the Indexing API.
-11. Note the Indexing API quota (default 200/day) under **APIs & Services** → **Quotas**; request more if needed. Only JobPosting / BroadcastEvent pages qualify.
-
-### 2. Bing Webmaster Tools
-
-1. Sign in to [Bing Webmaster Tools](https://www.bing.com/webmasters) and verify your site.
-2. Click the **Settings** gear icon (top right) → **API Access** → **API Key**.
-3. Generate an API Key and copy it.
-4. Set `BING_WEBMASTER_API_KEY` in your configuration.
-
-### 3. IndexNow (Instant Submission)
-
-1. Generate an IndexNow key (e.g. at [Bing IndexNow](https://www.bing.com/indexnow)).
-2. Place a file named `<your-key>.txt` containing only the key at your website root (`https://example.com/<your-key>.txt`).
-3. Set `INDEXNOW_KEY` in your configuration.
-
----
-
-## Client Configurations
-
-### Claude Desktop
-
-Edit your `claude_desktop_config.json`:
-- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "seo-webmaster": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/seo-webmaster-mcp/build/index.js"],
-      "env": {
-        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/gsc-key.json",
-        "BING_WEBMASTER_API_KEY": "your_bing_api_key",
-        "INDEXNOW_KEY": "your_indexnow_key"
-      }
-    }
-  }
-}
-```
-
-### Claude Code CLI
-
-Add to `~/.claude.json`:
-
-```json
-{
-  "mcpServers": {
-    "seo-webmaster": {
-      "type": "stdio",
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/seo-webmaster-mcp/build/index.js"],
-      "env": {
-        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/gsc-key.json",
-        "BING_WEBMASTER_API_KEY": "your_bing_api_key",
-        "INDEXNOW_KEY": "your_indexnow_key"
-      }
-    }
-  }
-}
-```
-
-### Cursor
-
-Add to `.cursor/mcp.json` or Cursor Settings → Features → MCP Servers:
-
-```json
-{
-  "mcpServers": {
-    "seo-webmaster": {
-      "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/seo-webmaster-mcp/build/index.js"],
-      "env": {
-        "GOOGLE_APPLICATION_CREDENTIALS": "/path/to/gsc-key.json",
-        "BING_WEBMASTER_API_KEY": "your_bing_api_key",
-        "INDEXNOW_KEY": "your_indexnow_key"
-      }
-    }
-  }
-}
-```
-
----
-
-## Example Agent Prompts
-
-Once connected, ask your AI assistant naturally:
-
-- *"Check search engine provider status."*
-- *"List all my verified properties across Google and Bing."*
-- *"Show me top 25 queries on Google for my site over the last 28 days."*
-- *"Compare my top queries on Bing vs Google for https://example.com/."*
-- *"Find striking distance keywords (ranking 5–15 with high impressions) on Google."*
-- *"Inspect https://example.com/blog/my-article and check if there are any mobile or schema errors."*
+- *"Check search engine provider status to see what is connected."*
+- *"List all my verified websites across Google and Bing."*
+- *"Show me the top 20 queries for my site on Google over the last 28 days."*
+- *"Find pages that get high impressions but low click-through rates (CTR < 2%)."*
+- *"Inspect https://example.com/blog/latest-post and tell me if it has any schema errors or mobile usability issues."*
 - *"Check all submitted sitemaps for my site and report indexing health."*
-- *"I just published 3 new blog posts. Submit them to IndexNow immediately."*
-- *"Notify Google that 5 job postings changed via the Indexing API (URL_UPDATED)."* (max 200/day; JobPosting / BroadcastEvent pages only)
-- *"Tell Google these 2 expired job URLs are deleted (URL_DELETED)."* 
+- *"I just published 5 new blog posts: [URL list]. Submit them to IndexNow immediately."*
+- *"Notify Google that these 2 job postings were updated via the Indexing API."*
 
 ---
 
-## Local Development
+## ❓ Troubleshooting & FAQs
+
+### 1. `Permission error (403): User does not have sufficient permission`
+- **Cause:** The service account has not been added as a user to your property in Google Search Console.
+- **Fix:** In Google Search Console, go to **Settings → Users and permissions → Add user** and paste the exact email of your service account.
+
+### 2. `Site URL not found`
+- **Cause:** Search Console differentiates between domain properties (`sc-domain:example.com`) and URL prefix properties (`https://example.com/`).
+- **Fix:** Run the `list_sites` tool first to view the exact property string format for your website.
+
+### 3. `Bing Webmaster API authentication failed (401)`
+- **Cause:** Missing or invalid `BING_WEBMASTER_API_KEY`.
+- **Fix:** Re-generate your API key in Bing Webmaster Tools (Settings → API Access → API Key) and ensure there are no leading/trailing spaces in your config.
+
+### 4. `Bing URL inspection returns UNKNOWN`
+- **Explanation:** Unlike Google, the Bing Webmaster Tools API does not offer URL-level live inspection. The server returns coarse crawl stats if available, and transparently marks inspection verdict as `UNKNOWN` rather than fabricating data.
+
+---
+
+## 💻 Local Development & Contributing
+
+Contributions are welcome! Please ensure all pull requests follow the project standards.
 
 ```bash
 # Clone the repository
@@ -233,12 +268,21 @@ npm install
 # Compile TypeScript
 npm run build
 
-# Watch mode during development
-npm run dev
+# Run unit tests
+npm test
+
+# Run linter (oxlint)
+npm run lint
+
+# Check code formatting (oxfmt)
+npm run format:check
 ```
+
+### Pull Requests
+When opening a pull request, please use the template located at [`.github/pull_request_template.md`](.github/pull_request_template.md) and adhere to the guidelines in [`AGENTS.md`](AGENTS.md).
 
 ---
 
-## License
+## 📄 License
 
 MIT © [Aakash Patel](https://github.com/itsaakashpatel)
