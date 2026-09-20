@@ -1,24 +1,31 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { submitToIndexNow } from "../providers/indexnow/provider.js";
+import { getErrorMessage } from "../core/errors.js";
+import { parseUrlList } from "../core/urls.js";
+import { okText, errText } from "../core/responses.js";
 
-export function registerSubmitUrlsTool(server: McpServer) {
+export function registerSubmitUrlsTool(server: McpServer): void {
   server.tool(
     "submit_urls_indexnow",
     "Instantly notify Bing, Yandex, Seznam, and other IndexNow search engines about added, updated, or deleted URLs on your website.",
     {
       host: z
         .string()
+        .min(1)
         .describe("The domain name of your site (e.g. 'example.com') without protocol"),
       urls: z
         .string()
+        .min(1)
         .describe(
           "Comma-separated or newline-separated list of full URLs to submit (or JSON array of URLs)"
         ),
       key: z
         .string()
         .optional()
-        .describe("IndexNow key (optional if INDEXNOW_KEY environment variable is set)"),
+        .describe(
+          "IndexNow key (sensitive; prefer INDEXNOW_KEY env var to avoid storing keys in chat history)"
+        ),
       keyLocation: z
         .string()
         .optional()
@@ -26,44 +33,26 @@ export function registerSubmitUrlsTool(server: McpServer) {
     },
     async ({ host, urls, key, keyLocation }) => {
       try {
-        let parsedUrls: string[] = [];
-
-        const trimmed = urls.trim();
-        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-          try {
-            parsedUrls = JSON.parse(trimmed);
-          } catch {
-            parsedUrls = trimmed.split(/[\r\n,]+/).map((u) => u.trim());
-          }
-        } else {
-          parsedUrls = trimmed.split(/[\r\n,]+/).map((u) => u.trim());
+        let parsedUrls: string[];
+        try {
+          parsedUrls = parseUrlList(urls);
+        } catch (err: unknown) {
+          return errText(`Invalid urls input: ${getErrorMessage(err)}`);
         }
-
-        parsedUrls = parsedUrls.filter((u) => u.length > 0);
 
         if (parsedUrls.length === 0) {
-          return {
-            isError: true,
-            content: [
-              {
-                type: "text",
-                text: "No valid URLs provided to submit.",
-              },
-            ],
-          };
+          return errText("No valid URLs provided to submit.");
         }
 
-        const cleanHost = host.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-
         const res = await submitToIndexNow({
-          host: cleanHost,
+          host: host.trim(),
           urls: parsedUrls,
           key,
           keyLocation,
         });
 
         const lines: string[] = [];
-        lines.push("### IndexNow URL Submission Successful 🚀");
+        lines.push("### IndexNow URL Submission Successful");
         lines.push(`- **Host:** \`${res.host}\``);
         lines.push(`- **URLs Submitted:** ${res.submittedCount}`);
         lines.push(`- **Status:** ${res.statusCode} (${res.statusMessage})`);
@@ -76,24 +65,9 @@ export function registerSubmitUrlsTool(server: McpServer) {
           lines.push(`- *...and ${res.urlList.length - 10} more URLs*`);
         }
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: lines.join("\n"),
-            },
-          ],
-        };
-      } catch (error: any) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `IndexNow submission error: ${error.message}`,
-            },
-          ],
-        };
+        return okText(lines.join("\n"));
+      } catch (error: unknown) {
+        return errText(`IndexNow submission error: ${getErrorMessage(error)}`);
       }
     }
   );

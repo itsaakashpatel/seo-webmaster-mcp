@@ -1,3 +1,5 @@
+import { getErrorCode, getErrorMessage } from "../../core/errors.js";
+
 export function isBingConfigured(): boolean {
   return Boolean(
     process.env.BING_WEBMASTER_API_KEY &&
@@ -6,7 +8,7 @@ export function isBingConfigured(): boolean {
 }
 
 export function getBingApiKey(): string {
-  const key = process.env.BING_WEBMASTER_API_KEY?.trim();
+  const key: string | undefined = process.env.BING_WEBMASTER_API_KEY?.trim();
   if (!key) {
     throw new Error(getBingConfigurationGuide());
   }
@@ -25,17 +27,18 @@ export function getBingConfigurationGuide(): string {
   );
 }
 
-export function formatBingError(error: any): string {
-  const msg = error?.message || String(error);
-  if (msg.includes("401") || msg.includes("Unauthorized") || msg.includes("Invalid API Key")) {
+export function formatBingError(error: unknown): string {
+  const code: number | undefined = getErrorCode(error);
+  const msg: string = getErrorMessage(error);
+  if (code === 401 || msg.includes("Unauthorized") || msg.includes("Invalid API Key")) {
     return (
-      `Bing Webmaster API authentication failed (Invalid API Key).\n\n` +
+      `Bing Webmaster API authentication failed (401 Invalid API Key): ${msg}\n\n` +
       "Please verify your `BING_WEBMASTER_API_KEY` in Bing Webmaster Tools Settings → API Access."
     );
   }
-  if (msg.includes("403") || msg.includes("Forbidden")) {
+  if (code === 403 || msg.includes("Forbidden")) {
     return (
-      `Bing Webmaster permission denied.\n\n` +
+      `Bing Webmaster permission denied (403): ${msg}\n\n` +
       "Ensure your Bing account has verified ownership of the requested site property."
     );
   }

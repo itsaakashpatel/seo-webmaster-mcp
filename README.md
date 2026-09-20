@@ -4,7 +4,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A unified **Model Context Protocol (MCP)** server providing AI assistants (Claude Desktop, Claude Code, Cursor, Windsurf, Cline, Zed, etc.) with comprehensive, read-only search performance data and instant indexing across **Google Search Console**, **Bing Webmaster Tools**, and **IndexNow**.
+A unified **Model Context Protocol (MCP)** server providing AI assistants (Claude Desktop, Claude Code, Cursor, Windsurf, Cline, Zed, etc.) with comprehensive, read-only search performance data and instant indexing across **Google Search Console**, **Google Indexing API**, **Bing Webmaster Tools**, and **IndexNow**.
 
 ---
 
@@ -14,9 +14,10 @@ Most search console tools are single-engine only. **SEO Webmaster MCP** unifies 
 
 - 🌐 **Cross-Engine Search Visibility** — Query organic performance (clicks, impressions, CTR, position) across Google and Bing with unified dimension breakdowns.
 - ⚡ **Instant Indexing via IndexNow** — Instantly notify Bing, Yandex, Seznam, and Naver whenever URLs are published, updated, or removed.
+- 🔍 **Google Indexing API** — Push up to 200 URLs/day to Google (`URL_UPDATED` / `URL_DELETED`). Only JobPosting or BroadcastEvent-in-VideoObject pages are eligible.
 - 🔍 **In-Depth URL Inspection** — Check real-time indexing status, crawl info, canonical URL tags, mobile usability issues, and rich results schema validation.
 - 🗺️ **Sitemap Health Monitoring** — Track sitemaps submitted across engines, check last crawl dates, and monitor indexed vs. submitted URLs.
-- 🛡️ **Safe & Extensible** — Read-only search analytics scopes protect your properties from unintended changes, while IndexNow handles fast discovery.
+- 🛡️ **Safe & Extensible** — Read-only search analytics scopes protect your properties from unintended changes, while IndexNow handles fast discovery. Google Indexing uses the separate `https://www.googleapis.com/auth/indexing` scope.
 
 ---
 
@@ -24,13 +25,14 @@ Most search console tools are single-engine only. **SEO Webmaster MCP** unifies 
 
 | Tool | Description |
 |---|---|
-| `engine_status` | Check the connection and configuration status of Google, Bing, and IndexNow providers with actionable setup guides. |
+| `engine_status` | Check the connection and configuration status of Google, Bing, IndexNow, and Google Indexing API providers with actionable setup guides. |
 | `list_sites` | List verified properties across Google Search Console and Bing Webmaster Tools with user roles/permissions. |
 | `search_analytics` | Query clicks, impressions, CTR, and average position grouped by queries, pages, countries, devices, and dates. |
 | `inspect_url` | Inspect a URL for live indexing status, crawl timestamp, canonical checks, mobile usability, and schema markup. |
 | `list_sitemaps` | List submitted sitemaps, error/warning counts, and submitted vs indexed URL counts. |
 | `get_sitemap` | Retrieve deep indexing statistics for a specific sitemap feed. |
 | `submit_urls_indexnow` | Instantly submit up to 10,000 URLs to Bing and partner engines using the IndexNow protocol. |
+| `submit_urls_google` | Notify Google via the Indexing API (max 200 URLs/call, ~200/day quota; JobPosting / BroadcastEvent pages only). |
 
 <details>
 <summary><strong>Detailed Parameter Reference</strong></summary>
@@ -89,6 +91,14 @@ No parameters required.
 | `key` | string | No | IndexNow key (optional if `INDEXNOW_KEY` env var is set) |
 | `keyLocation` | string | No | Full URL to key file if hosted in custom location |
 
+### 8. <code>submit_urls_google</code>
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `urls` | string | **Yes** | Comma/newline-separated full https URLs (or JSON array). Max 200 per call |
+| `type` | string | No | `URL_UPDATED` (new/changed) or `URL_DELETED` (removed). Default: `URL_UPDATED` |
+
+> Google limits: only pages with JobPosting or BroadcastEvent-in-VideoObject structured data are eligible. Default quota is 200 publish requests/day. A 200 response means Google may recrawl soon; 429 means quota exhausted.
+
 </details>
 
 ---
@@ -101,13 +111,15 @@ You can configure any or all of the supported engines:
 
 1. In the [Google Cloud Console](https://console.cloud.google.com/), create a project (or select an existing one).
 2. Go to **APIs & Services** → **Library**, search for **Google Search Console API**, and click **Enable**.
-3. Go to **APIs & Services** → **Credentials** → **Create Credentials** → **Service Account**.
-4. Give it a name (e.g., `gsc-mcp-reader`) and complete the creation.
-5. Click on the service account → **Keys** tab → **Add Key** → **Create new key** → **JSON**.
-6. Save the downloaded JSON key file securely on your computer (e.g., `~/.config/gcloud/gsc-key.json`).
-7. Copy the service account's email address (e.g. `gsc-mcp-reader@project.iam.gserviceaccount.com`).
-8. In [Google Search Console](https://search.google.com/search-console), select your property → **Settings** → **Users and permissions** → **Add user**.
-9. Paste the service account email and grant **Restricted** (or **Full**) permission.
+3. Repeat step 2 for the **Indexing API** (`indexing.googleapis.com`) if you use `submit_urls_google`.
+4. Go to **APIs & Services** → **Credentials** → **Create Credentials** → **Service Account**.
+5. Give it a name (e.g., `gsc-mcp-reader`) and complete the creation.
+6. Click on the service account → **Keys** tab → **Add Key** → **Create new key** → **JSON**.
+7. Save the downloaded JSON key file securely on your computer (e.g., `~/.config/gcloud/gsc-key.json`).
+8. Copy the service account's email address (e.g. `gsc-mcp-reader@project.iam.gserviceaccount.com`).
+9. In [Google Search Console](https://search.google.com/search-console), select your property → **Settings** → **Users and permissions** → **Add user**.
+10. Paste the service account email and grant **Owner** (required for Indexing API) or at least **Full** permission. Verify ownership of every domain you submit via the Indexing API.
+11. Note the Indexing API quota (default 200/day) under **APIs & Services** → **Quotas**; request more if needed. Only JobPosting / BroadcastEvent pages qualify.
 
 ### 2. Bing Webmaster Tools
 
@@ -203,6 +215,8 @@ Once connected, ask your AI assistant naturally:
 - *"Inspect https://example.com/blog/my-article and check if there are any mobile or schema errors."*
 - *"Check all submitted sitemaps for my site and report indexing health."*
 - *"I just published 3 new blog posts. Submit them to IndexNow immediately."*
+- *"Notify Google that 5 job postings changed via the Indexing API (URL_UPDATED)."* (max 200/day; JobPosting / BroadcastEvent pages only)
+- *"Tell Google these 2 expired job URLs are deleted (URL_DELETED)."* 
 
 ---
 

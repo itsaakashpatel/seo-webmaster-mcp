@@ -1,9 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { registry } from "../core/registry.js";
-import { SiteInfo } from "../core/types.js";
+import { SiteInfo, EngineType } from "../core/types.js";
+import { getErrorMessage } from "../core/errors.js";
+import { okText, errText } from "../core/responses.js";
 
-export function registerListSitesTool(server: McpServer) {
+function toEngine(value: string): EngineType | undefined {
+  if (value === "google" || value === "bing") {
+    return value;
+  }
+  return undefined;
+}
+
+export function registerListSitesTool(server: McpServer): void {
   server.tool(
     "list_sites",
     "List all verified sites (properties) across Google Search Console and Bing Webmaster Tools, along with permission levels.",
@@ -16,45 +25,39 @@ export function registerListSitesTool(server: McpServer) {
     },
     async ({ engine }) => {
       try {
-        const targetEngines =
-          engine === "all" ? ["google", "bing"] : [engine];
+        const targetEngines: EngineType[] =
+          engine === "all" ? ["google", "bing"] : [];
+        if (engine !== "all") {
+          const single: EngineType | undefined = toEngine(engine);
+          if (!single) {
+            throw new Error(`Unknown engine "${engine}".`);
+          }
+          targetEngines.push(single);
+        }
 
         const allSites: SiteInfo[] = [];
         const errors: string[] = [];
 
         for (const eng of targetEngines) {
-          const provider = registry.get(eng as any);
+          const provider = registry.get(eng);
           if (!provider) continue;
 
           try {
-            const sites = await provider.listSites();
+            const sites: SiteInfo[] = await provider.listSites();
             allSites.push(...sites);
-          } catch (err: any) {
-            errors.push(`**${provider.displayName}:** ${err.message}`);
+          } catch (err: unknown) {
+            errors.push(`**${provider.displayName}:** ${getErrorMessage(err)}`);
           }
         }
 
         if (allSites.length === 0 && errors.length > 0) {
-          return {
-            isError: true,
-            content: [
-              {
-                type: "text",
-                text: `Failed to retrieve sites:\n\n${errors.join("\n\n")}`,
-              },
-            ],
-          };
+          return errText(`Failed to retrieve sites:\n\n${errors.join("\n\n")}`);
         }
 
         if (allSites.length === 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "No sites found on any configured search engine.\n\nMake sure your credentials / API keys have verified properties.",
-              },
-            ],
-          };
+          return okText(
+            "No sites found on any configured search engine.\n\nMake sure your credentials / API keys have verified properties."
+          );
         }
 
         const lines: string[] = [];
@@ -63,12 +66,12 @@ export function registerListSitesTool(server: McpServer) {
         lines.push("| --- | --- | --- |");
 
         for (const s of allSites) {
-          const badge = s.engine === "google" ? "Google" : "Bing";
+          const badge: string = s.engine === "google" ? "Google" : "Bing";
           lines.push(`| **${badge}** | \`${s.siteUrl}\` | ${s.permissionLevel} |`);
         }
 
         if (errors.length > 0) {
-          lines.push("\n> ⚠️ **Provider Warnings:**");
+          lines.push("\n> **Provider Warnings:**");
           for (const e of errors) {
             lines.push(`> - ${e}`);
           }
@@ -78,24 +81,9 @@ export function registerListSitesTool(server: McpServer) {
           "\n*Note: Use the exact Site URL (e.g. `sc-domain:example.com` or `https://example.com/`) when querying search analytics or inspecting URLs.*"
         );
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: lines.join("\n"),
-            },
-          ],
-        };
-      } catch (error: any) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `Error listing sites: ${error.message}`,
-            },
-          ],
-        };
+        return okText(lines.join("\n"));
+      } catch (error: unknown) {
+        return errText(`Error listing sites: ${getErrorMessage(error)}`);
       }
     }
   );

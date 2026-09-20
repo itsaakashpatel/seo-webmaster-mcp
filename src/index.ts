@@ -13,6 +13,7 @@ import { registerSearchAnalyticsTool } from "./tools/search-analytics.js";
 import { registerInspectUrlTool } from "./tools/inspect-url.js";
 import { registerSitemapsTools } from "./tools/sitemaps.js";
 import { registerSubmitUrlsTool } from "./tools/submit-urls.js";
+import { registerSubmitGoogleUrlsTool } from "./tools/submit-google.js";
 
 // Register search engine providers
 registry.register(new GoogleSearchConsoleProvider());
@@ -31,6 +32,7 @@ registerSearchAnalyticsTool(server);
 registerInspectUrlTool(server);
 registerSitemapsTools(server);
 registerSubmitUrlsTool(server);
+registerSubmitGoogleUrlsTool(server);
 
 async function main() {
   const transport = new StdioServerTransport();

@@ -1,11 +1,15 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registry } from "../core/registry.js";
 import { isIndexNowConfigured, getIndexNowConfigurationGuide } from "../providers/indexnow/provider.js";
+import {
+  isIndexingConfigured,
+  getIndexingGuide,
+} from "../providers/google/indexing.js";
 
-export function registerEngineStatusTool(server: McpServer) {
+export function registerEngineStatusTool(server: McpServer): void {
   server.tool(
     "engine_status",
-    "Check the configuration and connection status of all integrated search engine providers (Google Search Console, Bing Webmaster Tools, IndexNow).",
+    "Check the configuration and connection status of all integrated search engine providers (Google Search Console, Google Indexing API, Bing Webmaster Tools, IndexNow).",
     {},
     async () => {
       const providers = registry.getAll();
@@ -33,11 +37,17 @@ export function registerEngineStatusTool(server: McpServer) {
         `| IndexNow (Instant Indexing) | \`indexnow\` | ${indexNowStatus} | API Key (INDEXNOW_KEY) |`
       );
 
+      const indexingStatus = isIndexingConfigured() ? "✅ Connected" : "❌ Not Configured";
+      lines.push(
+        `| Google Indexing API (JobPosting/BroadcastEvent, 200/day) | \`google-indexing\` | ${indexingStatus} | Service Account JSON + Indexing API enabled |`
+      );
+
       lines.push("");
 
       // Provide setup tips for unconfigured engines
       const unconfigured = providers.filter((p) => !p.isConfigured());
-      if (unconfigured.length > 0 || !isIndexNowConfigured()) {
+      const indexingMissing: boolean = !isIndexingConfigured();
+      if (unconfigured.length > 0 || !isIndexNowConfigured() || indexingMissing) {
         lines.push("#### Setup Guides for Inactive Providers:\n");
         for (const p of unconfigured) {
           lines.push(`**${p.displayName}:**`);
@@ -47,6 +57,11 @@ export function registerEngineStatusTool(server: McpServer) {
         if (!isIndexNowConfigured()) {
           lines.push("**IndexNow:**");
           lines.push(getIndexNowConfigurationGuide());
+          lines.push("");
+        }
+        if (indexingMissing) {
+          lines.push("**Google Indexing API:**");
+          lines.push(getIndexingGuide());
           lines.push("");
         }
       } else {

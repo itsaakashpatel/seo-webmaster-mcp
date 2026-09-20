@@ -1,24 +1,28 @@
 export type EngineType = "google" | "bing" | "indexnow";
 
+export type SearchType = "web" | "image" | "video" | "news" | "discover" | "googleNews";
+export type DataState = "all" | "final";
+export type DeviceFilter = "DESKTOP" | "MOBILE" | "TABLET";
+
 export interface SiteInfo {
-  siteUrl: string;
-  permissionLevel: string;
-  engine: EngineType;
+  readonly siteUrl: string;
+  readonly permissionLevel: string;
+  readonly engine: EngineType;
 }
 
 export interface SearchAnalyticsQuery {
-  siteUrl: string;
-  startDate: string;
-  endDate: string;
-  dimensions?: string[];
-  rowLimit?: number;
-  startRow?: number;
-  searchType?: string;
-  dataState?: "all" | "final";
-  queryFilter?: string;
-  pageFilter?: string;
-  countryFilter?: string;
-  deviceFilter?: "DESKTOP" | "MOBILE" | "TABLET";
+  readonly siteUrl: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly dimensions?: readonly string[];
+  readonly rowLimit?: number;
+  readonly startRow?: number;
+  readonly searchType?: SearchType | string;
+  readonly dataState?: DataState | string;
+  readonly queryFilter?: string;
+  readonly pageFilter?: string;
+  readonly countryFilter?: string;
+  readonly deviceFilter?: DeviceFilter;
 }
 
 export interface AnalyticsRow {
@@ -44,6 +48,8 @@ export interface AnalyticsResult {
   columns: string[];
   summary: AnalyticsSummary;
   rows: AnalyticsRow[];
+  effectiveLimit: number;
+  note?: string;
 }
 
 export interface UrlInspectionResult {
@@ -109,4 +115,24 @@ export interface IndexNowSubmissionResult {
   statusCode: number;
   statusMessage: string;
   urlList: string[];
+}
+
+export type GoogleIndexingType = "URL_UPDATED" | "URL_DELETED";
+
+export interface GoogleIndexingItemResult {
+  url: string;
+  type: GoogleIndexingType;
+  success: boolean;
+  statusCode: number;
+  message: string;
+  notifyTime?: string;
+}
+
+export interface GoogleIndexingSubmissionResult {
+  engine: "google";
+  submittedCount: number;
+  successCount: number;
+  failureCount: number;
+  notificationType: GoogleIndexingType;
+  items: GoogleIndexingItemResult[];
 }

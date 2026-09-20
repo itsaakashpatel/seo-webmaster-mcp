@@ -13,6 +13,9 @@ import {
   formatGoogleError,
 } from "./auth.js";
 
+import { normalizeDimensions, validateDateRange, clampRowLimit, clampStartRow } from "../../core/validation.js";
+import { asRecord } from "../../core/guards.js";
+
 const VALID_DIMENSIONS = [
   "query",
   "page",
@@ -22,46 +25,78 @@ const VALID_DIMENSIONS = [
   "date",
 ] as const;
 
+export type ValidDimension = (typeof VALID_DIMENSIONS)[number];
+
+function isValidDimension(value: string): value is ValidDimension {
+  return (VALID_DIMENSIONS as readonly string[]).includes(value);
+}
+
+export function normalizeGoogleDimensions(input: readonly string[] | undefined): ValidDimension[] {
+  return normalizeDimensions(input).filter(isValidDimension);
+}
+
 function parseFilter(
   dimension: string,
   filterValue: string
 ): { dimension: string; operator: string; expression: string } {
-  const trimmed = filterValue.trim();
+  const trimmed: string = filterValue.trim();
+  if (trimmed.length === 0) {
+    throw new Error(`Invalid filter for "${dimension}": value is empty.`);
+  }
+
+  const getExpr = (prefixLen: number, label: string): string => {
+    const expr: string = trimmed.slice(prefixLen).trim();
+    if (expr.length === 0) {
+      throw new Error(`Invalid filter for "${dimension}": "${label}" needs a non-empty pattern.`);
+    }
+    if (label.includes("regex") && expr.length > 200) {
+      throw new Error(`Invalid filter for "${dimension}": regex exceeds 200 chars.`);
+    }
+    try {
+      if (label.includes("regex")) {
+        new RegExp(expr);
+      }
+    } catch (err: unknown) {
+      const msg: string = err instanceof Error ? err.message : String(err);
+      throw new Error(`Invalid filter for "${dimension}": bad regex "${expr}": ${msg}`);
+    }
+    return expr;
+  };
 
   if (trimmed.startsWith("!regex:")) {
     return {
       dimension,
       operator: "excludingRegex",
-      expression: trimmed.slice(7),
+      expression: getExpr(7, "regex"),
     };
   }
   if (trimmed.startsWith("regex:")) {
     return {
       dimension,
       operator: "includingRegex",
-      expression: trimmed.slice(6),
+      expression: getExpr(6, "regex"),
     };
   }
   if (trimmed.startsWith("exact:")) {
     return {
       dimension,
       operator: "equals",
-      expression: trimmed.slice(6),
+      expression: getExpr(6, "exact"),
     };
   }
   if (trimmed.startsWith("!exact:") || trimmed.startsWith("!=")) {
-    const expr = trimmed.startsWith("!exact:") ? trimmed.slice(7) : trimmed.slice(2);
+    const prefixLen: number = trimmed.startsWith("!exact:") ? 7 : 2;
     return {
       dimension,
       operator: "notEquals",
-      expression: expr,
+      expression: getExpr(prefixLen, "not-equals"),
     };
   }
   if (trimmed.startsWith("!")) {
     return {
       dimension,
       operator: "notContains",
-      expression: trimmed.slice(1),
+      expression: getExpr(1, "not-contains"),
     };
   }
 
@@ -93,28 +128,25 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
       return sites.map((s) => ({
         siteUrl: s.siteUrl || "",
         permissionLevel: s.permissionLevel || "unknown",
-        engine: "google",
+        engine: "google" as const,
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw new Error(formatGoogleError(err));
     }
   }
 
   async queryAnalytics(query: SearchAnalyticsQuery): Promise<AnalyticsResult> {
     try {
+      validateDateRange(query.startDate, query.endDate);
+      const siteUrl: string = query.siteUrl.trim();
+      if (siteUrl.length === 0) {
+        throw new Error("siteUrl is empty.");
+      }
       const client = getGoogleSearchConsoleClient();
 
-      const dimensionList = query.dimensions
-        ? query.dimensions.filter((d) =>
-            VALID_DIMENSIONS.includes(d as (typeof VALID_DIMENSIONS)[number])
-          )
-        : ["query"];
+      const dimensionList: string[] = normalizeGoogleDimensions(query.dimensions);
 
-      if (dimensionList.length === 0) {
-        dimensionList.push("query");
-      }
-
-      const filters: any[] = [];
+      const filters: Array<Record<string, string>> = [];
       if (query.queryFilter) {
         filters.push(parseFilter("query", query.queryFilter));
       }
@@ -122,10 +154,16 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
         filters.push(parseFilter("page", query.pageFilter));
       }
       if (query.countryFilter) {
+        const country: string = query.countryFilter.trim().toUpperCase();
+        if (!/^[A-Z]{3}$/.test(country)) {
+          throw new Error(
+            `Invalid countryFilter "${query.countryFilter}". Use ISO 3166-1 alpha-3 (e.g. USA, GBR).`
+          );
+        }
         filters.push({
           dimension: "country",
           operator: "equals",
-          expression: query.countryFilter.toUpperCase().trim(),
+          expression: country,
         });
       }
       if (query.deviceFilter) {
@@ -136,45 +174,44 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
         });
       }
 
-      const effectiveLimit = Math.min(Math.max(query.rowLimit || 100, 1), 25000);
-
-      const requestBody: any = {
-        startDate: query.startDate,
-        endDate: query.endDate,
-        dimensions: dimensionList,
-        rowLimit: effectiveLimit,
-        startRow: query.startRow || 0,
-        type: query.searchType || "web",
-        dataState: query.dataState || "all",
-      };
-
-      if (filters.length > 0) {
-        requestBody.dimensionFilterGroups = [{ filters }];
-      }
+      const effectiveLimit: number = clampRowLimit(query.rowLimit, 25000, 100);
+      const startRow: number = clampStartRow(query.startRow);
 
       const res = await client.searchanalytics.query({
-        siteUrl: query.siteUrl,
-        requestBody,
+        siteUrl: siteUrl,
+        requestBody: {
+          startDate: query.startDate.trim(),
+          endDate: query.endDate.trim(),
+          dimensions: dimensionList,
+          rowLimit: effectiveLimit,
+          startRow,
+          type: query.searchType || "web",
+          dataState: query.dataState || "all",
+          dimensionFilterGroups:
+            filters.length > 0 ? [{ filters }] : undefined,
+        },
       });
 
-      const rawRows = res.data.rows || [];
+      const rawRows: unknown[] = Array.isArray(res.data.rows) ? res.data.rows : [];
 
       let totalClicks = 0;
       let totalImpressions = 0;
       let weightedPositionSum = 0;
 
-      const rows = rawRows.map((r: any) => {
-        const clicks = r.clicks || 0;
-        const impressions = r.impressions || 0;
-        const position = r.position || 0;
-        const ctr = r.ctr || 0;
+      const rows = rawRows.map((row: unknown) => {
+        const r: Record<string, unknown> = asRecord(row, "Search Analytics row");
+        const clicks: number = typeof r["clicks"] === "number" && Number.isFinite(r["clicks"]) ? r["clicks"] : 0;
+        const impressions: number = typeof r["impressions"] === "number" && Number.isFinite(r["impressions"]) ? r["impressions"] : 0;
+        const position: number = typeof r["position"] === "number" && Number.isFinite(r["position"]) ? r["position"] : 0;
+        const ctr: number = typeof r["ctr"] === "number" && Number.isFinite(r["ctr"]) ? r["ctr"] : 0;
 
         totalClicks += clicks;
         totalImpressions += impressions;
         weightedPositionSum += position * impressions;
 
+        const keysRaw: unknown = r["keys"];
         return {
-          keys: (r.keys || []).map(String),
+          keys: Array.isArray(keysRaw) ? keysRaw.map(String) : [],
           clicks,
           impressions,
           ctr,
@@ -204,8 +241,9 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
           overallPosition,
         },
         rows,
+        effectiveLimit,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw new Error(formatGoogleError(err));
     }
   }
@@ -216,11 +254,16 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
     languageCode = "en-US"
   ): Promise<UrlInspectionResult> {
     try {
+      const cleanSite: string = siteUrl.trim();
+      const cleanUrl: string = inspectionUrl.trim();
+      if (cleanSite.length === 0 || cleanUrl.length === 0) {
+        throw new Error("siteUrl and inspectionUrl must be non-empty.");
+      }
       const client = getGoogleSearchConsoleClient();
       const res = await client.urlInspection.index.inspect({
         requestBody: {
-          siteUrl,
-          inspectionUrl,
+          siteUrl: cleanSite,
+          inspectionUrl: cleanUrl,
           languageCode,
         },
       });
@@ -236,8 +279,8 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
 
       return {
         engine: "google",
-        inspectionUrl,
-        siteUrl,
+        inspectionUrl: cleanUrl,
+        siteUrl: cleanSite,
         verdict: idx?.verdict || "UNKNOWN",
         coverageState: idx?.coverageState || undefined,
         indexingState: idx?.indexingState || undefined,
@@ -275,62 +318,71 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
             }
           : undefined,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw new Error(formatGoogleError(err));
     }
   }
 
   async listSitemaps(siteUrl: string): Promise<SitemapInfo[]> {
     try {
+      const cleanSite: string = siteUrl.trim();
+      if (cleanSite.length === 0) {
+        throw new Error("siteUrl must be non-empty.");
+      }
       const client = getGoogleSearchConsoleClient();
-      const res = await client.sitemaps.list({ siteUrl });
+      const res = await client.sitemaps.list({ siteUrl: cleanSite });
       const sitemaps = res.data.sitemap || [];
 
-      return sitemaps.map((sm: any) => ({
+      return sitemaps.map((sm) => ({
         path: sm.path || "",
-        engine: "google",
+        engine: "google" as const,
         lastSubmitted: sm.lastSubmitted || undefined,
         lastDownloaded: sm.lastDownloaded || undefined,
         type: sm.isSitemapsIndex ? "Sitemap Index" : "Standard Sitemap",
         errors: Number(sm.errors) || 0,
         warnings: Number(sm.warnings) || 0,
         status: sm.isPending ? "Pending" : (Number(sm.errors) || 0) > 0 ? "Has errors" : "Success",
-        contents: (sm.contents || []).map((c: any) => ({
+        contents: (sm.contents || []).map((c) => ({
           type: c.type || "web",
           submitted: Number(c.submitted) || 0,
           indexed: Number(c.indexed) || 0,
         })),
       }));
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw new Error(formatGoogleError(err));
     }
   }
 
   async getSitemap(siteUrl: string, feedpath: string): Promise<SitemapInfo> {
     try {
+      const cleanSite: string = siteUrl.trim();
+      const cleanFeed: string = feedpath.trim();
+      if (cleanSite.length === 0 || cleanFeed.length === 0) {
+        throw new Error("siteUrl and feedpath must be non-empty.");
+      }
       const client = getGoogleSearchConsoleClient();
-      const res = await client.sitemaps.get({ siteUrl, feedpath });
+      const res = await client.sitemaps.get({ siteUrl: cleanSite, feedpath: cleanFeed });
       const sm = res.data;
 
       const errCount = Number(sm.errors) || 0;
       const warnCount = Number(sm.warnings) || 0;
 
       return {
-        path: sm.path || feedpath,
-        engine: "google",
+        path: sm.path || cleanFeed,
+        engine: "google" as const,
         lastSubmitted: sm.lastSubmitted || undefined,
         lastDownloaded: sm.lastDownloaded || undefined,
         type: sm.isSitemapsIndex ? "Sitemap Index" : "Standard Sitemap",
         errors: errCount,
         warnings: warnCount,
         status: sm.isPending ? "Pending" : errCount > 0 ? "Has errors" : "Success",
-        contents: (sm.contents || []).map((c: any) => ({
+        contents: (sm.contents || []).map((c) => ({
           type: c.type || "web",
           submitted: Number(c.submitted) || 0,
           indexed: Number(c.indexed) || 0,
         })),
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       throw new Error(formatGoogleError(err));
     }
   }
