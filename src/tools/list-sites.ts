@@ -21,12 +21,13 @@ export function registerListSitesTool(server: McpServer): void {
         .enum(["all", "google", "bing"])
         .optional()
         .default("all")
-        .describe("Search engine to list properties for: 'google', 'bing', or 'all' (default: 'all')"),
+        .describe(
+          "Search engine to list properties for: 'google', 'bing', or 'all' (default: 'all')",
+        ),
     },
     async ({ engine }) => {
       try {
-        const targetEngines: EngineType[] =
-          engine === "all" ? ["google", "bing"] : [];
+        const targetEngines: EngineType[] = engine === "all" ? ["google", "bing"] : [];
         if (engine !== "all") {
           const single: EngineType | undefined = toEngine(engine);
           if (!single) {
@@ -56,7 +57,7 @@ export function registerListSitesTool(server: McpServer): void {
 
         if (allSites.length === 0) {
           return okText(
-            "No sites found on any configured search engine.\n\nMake sure your credentials / API keys have verified properties."
+            "No sites found on any configured search engine.\n\nMake sure your credentials / API keys have verified properties.",
           );
         }
 
@@ -78,13 +79,13 @@ export function registerListSitesTool(server: McpServer): void {
         }
 
         lines.push(
-          "\n*Note: Use the exact Site URL (e.g. `sc-domain:example.com` or `https://example.com/`) when querying search analytics or inspecting URLs.*"
+          "\n*Note: Use the exact Site URL (e.g. `sc-domain:example.com` or `https://example.com/`) when querying search analytics or inspecting URLs.*",
         );
 
         return okText(lines.join("\n"));
       } catch (error: unknown) {
         return errText(`Error listing sites: ${getErrorMessage(error)}`);
       }
-    }
+    },
   );
 }

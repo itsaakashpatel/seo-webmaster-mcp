@@ -32,7 +32,10 @@ export async function readJsonSafe(res: Response): Promise<unknown> {
     return json;
   } catch (err: unknown) {
     const body: string = await readBodyText(res);
-    throw new Error(`Invalid JSON response (status ${res.status}): ${getErrorMessage(err)}. Body: ${body}`);
+    throw new Error(
+      `Invalid JSON response (status ${res.status}): ${getErrorMessage(err)}. Body: ${body}`,
+      { cause: err },
+    );
   }
 }
 

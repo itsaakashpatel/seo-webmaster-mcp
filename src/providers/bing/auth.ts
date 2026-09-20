@@ -2,8 +2,7 @@ import { getErrorCode, getErrorMessage } from "../../core/errors.js";
 
 export function isBingConfigured(): boolean {
   return Boolean(
-    process.env.BING_WEBMASTER_API_KEY &&
-      process.env.BING_WEBMASTER_API_KEY.trim().length > 0
+    process.env.BING_WEBMASTER_API_KEY && process.env.BING_WEBMASTER_API_KEY.trim().length > 0,
   );
 }
 

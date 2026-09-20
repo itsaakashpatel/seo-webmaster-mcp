@@ -9,6 +9,7 @@ These standards are mandatory for all code in this repo. They align with officia
 ## 1. TypeScript (per Handbook)
 
 1. Enable `strict: true` in `tsconfig.json`. Do not use `any` for new code. Prefer `unknown` + narrowing.
+2. Keep standard strict flags on: `noUncheckedIndexedAccess`, `noImplicitReturns`, `noFallthroughCasesInSwitch`, `noUnusedLocals`, `noUnusedParameters`.
 2. Give every exported function an explicit return type and explicit parameter types.
 3. Use `narrowing` (discriminated unions, `typeof`/`instanceof` guards, `Array.isArray`) before touching `unknown` or union values. Never cast with `as` to silence a check.
 4. Model domain shapes with `interface`/`type`, `readonly` where mutation is not needed, and string-literal unions instead of bare `string` for enums (e.g. `"google" | "bing"`).
@@ -45,11 +46,13 @@ These standards are mandatory for all code in this repo. They align with officia
 
 ## 5. Style (minimal, to support above)
 
-1. 2-space indent, semicolons, double quotes, trailing commas where multiline — match existing files.
+1. 2-space indent, semicolons, double quotes, trailing commas where multiline — match existing files. Enforced by oxfmt (config in `.oxfmtrc.json`); run `npm run format` on `src` before committing.
 2. One tool per file in `src/tools/`, one provider per folder in `src/providers/`.
 3. No new dependencies without justification. Zod for tool schemas, `googleapis` for Google, native `fetch` otherwise.
 
 ## 6. Verification
 
 1. Run `npm run build` (tsc) after every change. Fix all type errors, no `// @ts-ignore`.
-2. Smoke-test tools with invalid input (bad date, bad regex, empty filter, oversized URL list) and confirm clean error, not crash.
+2. Run `npm run lint` (oxlint, config in `.oxlintrc.json`). Standard rules: `correctness` + `suspicious` as errors, no `any`, no non-null assertions, `eqeqeq`, `prefer-const`, `no-var`, floating promises denied, `cause` chains on re-throws. Fix or justify every finding.
+3. Run `npm run format:check` (oxfmt, config in `.oxfmtrc.json`, scoped to `src`). Commit only format-clean code; markdown docs stay out of formatter scope.
+4. Smoke-test tools with invalid input (bad date, bad regex, empty filter, oversized URL list) and confirm clean error, not crash.

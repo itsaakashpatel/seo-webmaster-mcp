@@ -18,13 +18,13 @@ export function registerSubmitUrlsTool(server: McpServer): void {
         .string()
         .min(1)
         .describe(
-          "Comma-separated or newline-separated list of full URLs to submit (or JSON array of URLs)"
+          "Comma-separated or newline-separated list of full URLs to submit (or JSON array of URLs)",
         ),
       key: z
         .string()
         .optional()
         .describe(
-          "IndexNow key (sensitive; prefer INDEXNOW_KEY env var to avoid storing keys in chat history)"
+          "IndexNow key (sensitive; prefer INDEXNOW_KEY env var to avoid storing keys in chat history)",
         ),
       keyLocation: z
         .string()
@@ -69,6 +69,6 @@ export function registerSubmitUrlsTool(server: McpServer): void {
       } catch (error: unknown) {
         return errText(`IndexNow submission error: ${getErrorMessage(error)}`);
       }
-    }
+    },
   );
 }

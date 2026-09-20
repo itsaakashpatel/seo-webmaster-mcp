@@ -25,13 +25,15 @@ export function registerSubmitGoogleUrlsTool(server: McpServer): void {
         .string()
         .min(1)
         .describe(
-          "Comma-separated or newline-separated list of full https URLs (or JSON array). Max 200 per call."
+          "Comma-separated or newline-separated list of full https URLs (or JSON array). Max 200 per call.",
         ),
       type: z
         .enum(["URL_UPDATED", "URL_DELETED"])
         .optional()
         .default("URL_UPDATED")
-        .describe('Notification type: "URL_UPDATED" for new/changed pages, "URL_DELETED" for removed pages'),
+        .describe(
+          'Notification type: "URL_UPDATED" for new/changed pages, "URL_DELETED" for removed pages',
+        ),
     },
     async ({ urls, type }) => {
       try {
@@ -46,7 +48,7 @@ export function registerSubmitGoogleUrlsTool(server: McpServer): void {
         }
         if (parsed.length > GOOGLE_INDEXING_QUOTA_PER_DAY) {
           return errText(
-            `Too many URLs (${parsed.length}). Max ${GOOGLE_INDEXING_QUOTA_PER_DAY} per call; default daily quota is 200. Split into smaller batches.`
+            `Too many URLs (${parsed.length}). Max ${GOOGLE_INDEXING_QUOTA_PER_DAY} per call; default daily quota is 200. Split into smaller batches.`,
           );
         }
 
@@ -62,10 +64,10 @@ export function registerSubmitGoogleUrlsTool(server: McpServer): void {
         lines.push(`- **Succeeded:** ${res.successCount}`);
         lines.push(`- **Failed:** ${res.failureCount}`);
         lines.push(
-          `- **Eligibility:** Only JobPosting or BroadcastEvent (in VideoObject) pages are supported. Other pages return errors.`
+          `- **Eligibility:** Only JobPosting or BroadcastEvent (in VideoObject) pages are supported. Other pages return errors.`,
         );
         lines.push(
-          `- **Quota:** Default is 200 publish requests/day. 429 means quota exhausted; retry tomorrow.`
+          `- **Quota:** Default is 200 publish requests/day. 429 means quota exhausted; retry tomorrow.`,
         );
         lines.push("\n**Per-URL results:**");
         for (const item of res.items.slice(0, 20)) {
@@ -84,6 +86,6 @@ export function registerSubmitGoogleUrlsTool(server: McpServer): void {
       } catch (error: unknown) {
         return errText(`Google indexing error: ${getErrorMessage(error)}`);
       }
-    }
+    },
   );
 }

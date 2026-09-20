@@ -68,7 +68,7 @@ export function buildSafeRegExp(pattern: string, label: string): RegExp {
     return new RegExp(trimmed, "i");
   } catch (err: unknown) {
     const msg: string = err instanceof Error ? err.message : String(err);
-    throw new Error(`Invalid ${label} regex "${trimmed}": ${msg}`);
+    throw new Error(`Invalid ${label} regex "${trimmed}": ${msg}`, { cause: err });
   }
 }
 
@@ -100,7 +100,11 @@ export function normalizeSitemapKey(pathOrUrl: string): string {
   }
 }
 
-export function clampRowLimit(requested: number | undefined, max: number, fallback: number): number {
+export function clampRowLimit(
+  requested: number | undefined,
+  max: number,
+  fallback: number,
+): number {
   if (requested === undefined || !Number.isFinite(requested)) {
     return fallback;
   }

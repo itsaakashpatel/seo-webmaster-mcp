@@ -9,10 +9,7 @@ export function registerListSitemapsTool(server: McpServer): void {
     "list_sitemaps",
     "List all submitted sitemaps and their current status, last download date, error counts, and indexed URL counts.",
     {
-      siteUrl: z
-        .string()
-        .min(1)
-        .describe("Site URL as verified in Search Console"),
+      siteUrl: z.string().min(1).describe("Site URL as verified in Search Console"),
       engine: z
         .enum(["google", "bing"])
         .optional()
@@ -64,7 +61,9 @@ export function registerListSitemapsTool(server: McpServer): void {
           for (const sm of withContents) {
             lines.push(`\n**\`${sm.path}\`**:`);
             for (const c of sm.contents || []) {
-              lines.push(`- **${c.type}**: ${c.indexed.toLocaleString()} indexed / ${c.submitted.toLocaleString()} submitted`);
+              lines.push(
+                `- **${c.type}**: ${c.indexed.toLocaleString()} indexed / ${c.submitted.toLocaleString()} submitted`,
+              );
             }
           }
         }
@@ -73,6 +72,6 @@ export function registerListSitemapsTool(server: McpServer): void {
       } catch (error: unknown) {
         return errText(`Error listing sitemaps: ${getErrorMessage(error)}`);
       }
-    }
+    },
   );
 }

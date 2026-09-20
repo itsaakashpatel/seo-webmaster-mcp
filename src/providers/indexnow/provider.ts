@@ -1,10 +1,7 @@
 import { IndexNowSubmissionResult } from "../../core/types.js";
 import { fetchWithTimeout, readBodyText } from "../../core/http.js";
 import { getErrorMessage } from "../../core/errors.js";
-import {
-  normalizeHost,
-  MAX_INDEXNOW_URLS,
-} from "../../core/validation.js";
+import { normalizeHost, MAX_INDEXNOW_URLS } from "../../core/validation.js";
 import { dedupeUrls, urlsBelongToHost } from "../../core/urls.js";
 
 export function isIndexNowConfigured(): boolean {
@@ -42,14 +39,14 @@ export async function submitToIndexNow(options: {
   }
   if (deduped.length > MAX_INDEXNOW_URLS) {
     throw new Error(
-      `Too many URLs (${deduped.length}). IndexNow allows max ${MAX_INDEXNOW_URLS} per request.`
+      `Too many URLs (${deduped.length}). IndexNow allows max ${MAX_INDEXNOW_URLS} per request.`,
     );
   }
   const bad: string[] = urlsBelongToHost(deduped, host);
   if (bad.length > 0) {
     const sample: string = bad.slice(0, 3).join(", ");
     throw new Error(
-      `${bad.length} URL(s) do not belong to host "${host}" or use non-http(s) scheme (e.g. ${sample}). All URLs must be https://<host>/...`
+      `${bad.length} URL(s) do not belong to host "${host}" or use non-http(s) scheme (e.g. ${sample}). All URLs must be https://<host>/...`,
     );
   }
 
@@ -67,7 +64,9 @@ export async function submitToIndexNow(options: {
       if (msg.includes("keyLocation must be")) {
         throw err;
       }
-      throw new Error(`Invalid keyLocation "${keyLocation}": must be a full http(s) URL.`);
+      throw new Error(`Invalid keyLocation "${keyLocation}": must be a full http(s) URL.`, {
+        cause: err,
+      });
     }
   }
 
@@ -94,7 +93,7 @@ export async function submitToIndexNow(options: {
       body: JSON.stringify(payload),
     });
   } catch (err: unknown) {
-    throw new Error(`IndexNow request failed: ${getErrorMessage(err)}`);
+    throw new Error(`IndexNow request failed: ${getErrorMessage(err)}`, { cause: err });
   }
 
   const statusCode: number = res.status;
@@ -106,19 +105,16 @@ export async function submitToIndexNow(options: {
       statusMessage = "URLs successfully submitted and processed by IndexNow.";
       break;
     case 202:
-      statusMessage =
-        "URLs received by IndexNow. Key validation will be performed asynchronously.";
+      statusMessage = "URLs received by IndexNow. Key validation will be performed asynchronously.";
       break;
     case 400:
       statusMessage = `Invalid format: Check host, key, and URL formats. Detail: ${bodyText}`;
       break;
     case 403:
-      statusMessage =
-        `Forbidden: The key is not valid or not hosted at the expected location. Detail: ${bodyText}`;
+      statusMessage = `Forbidden: The key is not valid or not hosted at the expected location. Detail: ${bodyText}`;
       break;
     case 422:
-      statusMessage =
-        `Unprocessable entity: URLs do not belong to the specified host or key mismatch. Detail: ${bodyText}`;
+      statusMessage = `Unprocessable entity: URLs do not belong to the specified host or key mismatch. Detail: ${bodyText}`;
       break;
     case 429:
       statusMessage = `Rate limited: Too many requests to IndexNow. Detail: ${bodyText}`;

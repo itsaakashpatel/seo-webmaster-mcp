@@ -12,11 +12,7 @@ import {
   getBingConfigurationGuide,
   formatBingError,
 } from "./auth.js";
-import {
-  fetchWithTimeout,
-  readBodyText,
-  readJsonSafe,
-} from "../../core/http.js";
+import { fetchWithTimeout, readBodyText, readJsonSafe } from "../../core/http.js";
 import { getErrorMessage, withCode } from "../../core/errors.js";
 import { asRecord } from "../../core/guards.js";
 import {
@@ -48,14 +44,16 @@ async function bingFetch(endpoint: string, params: Record<string, string> = {}):
       },
     });
   } catch (err: unknown) {
-    throw new Error(`Bing Webmaster request failed for "${endpoint}": ${getErrorMessage(err)}`);
+    throw new Error(`Bing Webmaster request failed for "${endpoint}": ${getErrorMessage(err)}`, {
+      cause: err,
+    });
   }
 
   if (!res.ok) {
     const body: string = await readBodyText(res);
     throw withCode(
       new Error(`Bing Webmaster API error (${res.status}): ${body || res.statusText}`),
-      res.status
+      res.status,
     );
   }
 
@@ -86,7 +84,11 @@ function rowText(row: BingQueryRow, field: BingTextField): string {
   return typeof value === "string" ? value : String(value ?? "");
 }
 
-function applyTextFilter(rows: BingQueryRow[], field: BingTextField, filterValue: string): BingQueryRow[] {
+function applyTextFilter(
+  rows: BingQueryRow[],
+  field: BingTextField,
+  filterValue: string,
+): BingQueryRow[] {
   const filter: string = filterValue.trim();
   if (filter.length === 0) {
     throw new Error("Filter value is empty.");
@@ -143,7 +145,7 @@ export class BingWebmasterProvider implements SearchEngineProvider {
         };
       });
     } catch (err: unknown) {
-      throw new Error(formatBingError(err));
+      throw new Error(formatBingError(err), { cause: err });
     }
   }
 
@@ -157,8 +159,7 @@ export class BingWebmasterProvider implements SearchEngineProvider {
       const data: unknown = await bingFetch("GetQueryStats", { siteUrl });
       const raw: unknown[] = Array.isArray(data) ? data : [];
       const rawRows: BingQueryRow[] = raw.filter(
-        (entry: unknown): entry is BingQueryRow =>
-          typeof entry === "object" && entry !== null
+        (entry: unknown): entry is BingQueryRow => typeof entry === "object" && entry !== null,
       );
 
       let filteredRows: BingQueryRow[] = rawRows;
@@ -198,9 +199,7 @@ export class BingWebmasterProvider implements SearchEngineProvider {
       });
 
       const overallCtr: string =
-        totalImpressions > 0
-          ? ((totalClicks / totalImpressions) * 100).toFixed(2) + "%"
-          : "0.00%";
+        totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) + "%" : "0.00%";
       const overallPosition: string =
         totalImpressions > 0 ? (weightedPositionSum / totalImpressions).toFixed(1) : "0.0";
 
@@ -211,7 +210,9 @@ export class BingWebmasterProvider implements SearchEngineProvider {
         notes.push("countryFilter, deviceFilter, searchType, and dataState are ignored for Bing.");
       }
       if (query.dimensions && query.dimensions.length > 0) {
-        notes.push(`Requested dimensions [${query.dimensions.join(", ")}] are not supported; Bing returns query-level rows only.`);
+        notes.push(
+          `Requested dimensions [${query.dimensions.join(", ")}] are not supported; Bing returns query-level rows only.`,
+        );
       }
 
       return {
@@ -231,7 +232,7 @@ export class BingWebmasterProvider implements SearchEngineProvider {
         note: notes.join(" "),
       };
     } catch (err: unknown) {
-      throw new Error(formatBingError(err));
+      throw new Error(formatBingError(err), { cause: err });
     }
   }
 
@@ -261,13 +262,14 @@ export class BingWebmasterProvider implements SearchEngineProvider {
         inspectionUrl: cleanUrl,
         siteUrl: cleanSite,
         verdict: "UNKNOWN",
-        coverageState: "UNKNOWN: Bing Webmaster API does not provide URL-level inspection. Use site crawl stats only as a coarse signal.",
+        coverageState:
+          "UNKNOWN: Bing Webmaster API does not provide URL-level inspection. Use site crawl stats only as a coarse signal.",
         lastCrawlTime: lastCrawl,
         referringUrls: [],
         sitemaps: [],
       };
     } catch (err: unknown) {
-      throw new Error(formatBingError(err));
+      throw new Error(formatBingError(err), { cause: err });
     }
   }
 
@@ -287,8 +289,10 @@ export class BingWebmasterProvider implements SearchEngineProvider {
         return {
           path: typeof f["Url"] === "string" ? f["Url"] : "",
           engine: "bing" as const,
-          lastSubmitted: typeof f["LastSubmittedDate"] === "string" ? f["LastSubmittedDate"] : undefined,
-          lastDownloaded: typeof f["LastCrawledDate"] === "string" ? f["LastCrawledDate"] : undefined,
+          lastSubmitted:
+            typeof f["LastSubmittedDate"] === "string" ? f["LastSubmittedDate"] : undefined,
+          lastDownloaded:
+            typeof f["LastCrawledDate"] === "string" ? f["LastCrawledDate"] : undefined,
           type: typeof f["FeedType"] === "string" ? f["FeedType"] : "Sitemap",
           errors: toNumber(f["CrawlErrorCount"]),
           warnings: 0,
@@ -305,7 +309,7 @@ export class BingWebmasterProvider implements SearchEngineProvider {
         };
       });
     } catch (err: unknown) {
-      throw new Error(formatBingError(err));
+      throw new Error(formatBingError(err), { cause: err });
     }
   }
 
@@ -317,10 +321,12 @@ export class BingWebmasterProvider implements SearchEngineProvider {
     const sitemaps: SitemapInfo[] = await this.listSitemaps(siteUrl);
     const target: string = normalizeSitemapKey(cleanFeed);
     const found: SitemapInfo | undefined = sitemaps.find(
-      (s: SitemapInfo) => normalizeSitemapKey(s.path) === target
+      (s: SitemapInfo) => normalizeSitemapKey(s.path) === target,
     );
     if (!found) {
-      throw new Error(`Sitemap feed "${cleanFeed}" not found in Bing Webmaster Tools for ${siteUrl.trim()}`);
+      throw new Error(
+        `Sitemap feed "${cleanFeed}" not found in Bing Webmaster Tools for ${siteUrl.trim()}`,
+      );
     }
     return found;
   }

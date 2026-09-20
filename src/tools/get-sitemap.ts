@@ -9,14 +9,13 @@ export function registerGetSitemapTool(server: McpServer): void {
     "get_sitemap",
     "Retrieve deep indexing and error metrics for a specific sitemap feed.",
     {
-      siteUrl: z
-        .string()
-        .min(1)
-        .describe("Site URL as verified in Search Console"),
+      siteUrl: z.string().min(1).describe("Site URL as verified in Search Console"),
       feedpath: z
         .string()
         .min(1)
-        .describe("Full URL or relative path to the sitemap (e.g. https://example.com/sitemap.xml)"),
+        .describe(
+          "Full URL or relative path to the sitemap (e.g. https://example.com/sitemap.xml)",
+        ),
       engine: z
         .enum(["google", "bing"])
         .optional()
@@ -50,7 +49,9 @@ export function registerGetSitemapTool(server: McpServer): void {
         if (sm.contents && sm.contents.length > 0) {
           lines.push("\n#### Contents Breakdown:");
           for (const c of sm.contents) {
-            lines.push(`- **${c.type}**: ${c.indexed.toLocaleString()} indexed / ${c.submitted.toLocaleString()} submitted`);
+            lines.push(
+              `- **${c.type}**: ${c.indexed.toLocaleString()} indexed / ${c.submitted.toLocaleString()} submitted`,
+            );
           }
         }
 
@@ -58,6 +59,6 @@ export function registerGetSitemapTool(server: McpServer): void {
       } catch (error: unknown) {
         return errText(`Error getting sitemap details: ${getErrorMessage(error)}`);
       }
-    }
+    },
   );
 }

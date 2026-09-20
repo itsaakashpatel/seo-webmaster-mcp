@@ -9,7 +9,10 @@ let cachedIndexingClient: indexing_v3.Indexing | null = null;
 const SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
 const INDEXING_SCOPES = ["https://www.googleapis.com/auth/indexing"];
 
-function createGoogleAuth(credentials: unknown, scopes: string[]): InstanceType<typeof google.auth.GoogleAuth> {
+function createGoogleAuth(
+  credentials: unknown,
+  scopes: string[],
+): InstanceType<typeof google.auth.GoogleAuth> {
   // googleapis types service-account JSON as JWT input; our JSON.parse result is
   // validated at runtime by GoogleAuth itself, so this single interop cast is intentional.
   return new google.auth.GoogleAuth({
@@ -19,10 +22,7 @@ function createGoogleAuth(credentials: unknown, scopes: string[]): InstanceType<
 }
 
 export function isGoogleConfigured(): boolean {
-  if (
-    process.env.GOOGLE_SERVICE_ACCOUNT_KEY ||
-    process.env.GOOGLE_SERVICE_ACCOUNT_JSON
-  ) {
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
     return true;
   }
   if (
@@ -63,7 +63,9 @@ function buildCredentials(): unknown {
     try {
       return JSON.parse(jsonString);
     } catch (err: unknown) {
-      throw new Error(`Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY: ${getErrorMessage(err)}.`);
+      throw new Error(`Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY: ${getErrorMessage(err)}.`, {
+        cause: err,
+      });
     }
   }
   const credentialsPath: string | undefined = process.env.GOOGLE_APPLICATION_CREDENTIALS;
@@ -76,7 +78,8 @@ function buildCredentials(): unknown {
       return JSON.parse(readFileSync(trimmedPath, "utf-8"));
     } catch (err: unknown) {
       throw new Error(
-        `Failed to load service account credentials from "${basename(trimmedPath)}": ${getErrorMessage(err)}`
+        `Failed to load service account credentials from "${basename(trimmedPath)}": ${getErrorMessage(err)}`,
+        { cause: err },
       );
     }
   }

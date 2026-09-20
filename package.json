@@ -11,6 +11,10 @@
   "scripts": {
     "build": "tsc && chmod +x build/index.js",
     "dev": "tsc --watch",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt --write src",
+    "format:check": "oxfmt --check src",
     "prepare": "npm run build"
   },
   "repository": {
@@ -48,6 +52,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
     "typescript": "^5.7.0"
   }
 }

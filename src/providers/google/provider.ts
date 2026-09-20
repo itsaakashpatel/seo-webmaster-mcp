@@ -13,7 +13,13 @@ import {
   formatGoogleError,
 } from "./auth.js";
 
-import { normalizeDimensions, validateDateRange, clampRowLimit, clampStartRow } from "../../core/validation.js";
+import {
+  normalizeDimensions,
+  validateDateRange,
+  clampRowLimit,
+  clampStartRow,
+  buildSafeRegExp,
+} from "../../core/validation.js";
 import { asRecord } from "../../core/guards.js";
 
 const VALID_DIMENSIONS = [
@@ -37,7 +43,7 @@ export function normalizeGoogleDimensions(input: readonly string[] | undefined):
 
 function parseFilter(
   dimension: string,
-  filterValue: string
+  filterValue: string,
 ): { dimension: string; operator: string; expression: string } {
   const trimmed: string = filterValue.trim();
   if (trimmed.length === 0) {
@@ -49,16 +55,8 @@ function parseFilter(
     if (expr.length === 0) {
       throw new Error(`Invalid filter for "${dimension}": "${label}" needs a non-empty pattern.`);
     }
-    if (label.includes("regex") && expr.length > 200) {
-      throw new Error(`Invalid filter for "${dimension}": regex exceeds 200 chars.`);
-    }
-    try {
-      if (label.includes("regex")) {
-        new RegExp(expr);
-      }
-    } catch (err: unknown) {
-      const msg: string = err instanceof Error ? err.message : String(err);
-      throw new Error(`Invalid filter for "${dimension}": bad regex "${expr}": ${msg}`);
+    if (label.includes("regex")) {
+      buildSafeRegExp(expr, `filter for "${dimension}"`);
     }
     return expr;
   };
@@ -131,7 +129,7 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
         engine: "google" as const,
       }));
     } catch (err: unknown) {
-      throw new Error(formatGoogleError(err));
+      throw new Error(formatGoogleError(err), { cause: err });
     }
   }
 
@@ -157,7 +155,7 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
         const country: string = query.countryFilter.trim().toUpperCase();
         if (!/^[A-Z]{3}$/.test(country)) {
           throw new Error(
-            `Invalid countryFilter "${query.countryFilter}". Use ISO 3166-1 alpha-3 (e.g. USA, GBR).`
+            `Invalid countryFilter "${query.countryFilter}". Use ISO 3166-1 alpha-3 (e.g. USA, GBR).`,
           );
         }
         filters.push({
@@ -187,8 +185,7 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
           startRow,
           type: query.searchType || "web",
           dataState: query.dataState || "all",
-          dimensionFilterGroups:
-            filters.length > 0 ? [{ filters }] : undefined,
+          dimensionFilterGroups: filters.length > 0 ? [{ filters }] : undefined,
         },
       });
 
@@ -200,10 +197,16 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
 
       const rows = rawRows.map((row: unknown) => {
         const r: Record<string, unknown> = asRecord(row, "Search Analytics row");
-        const clicks: number = typeof r["clicks"] === "number" && Number.isFinite(r["clicks"]) ? r["clicks"] : 0;
-        const impressions: number = typeof r["impressions"] === "number" && Number.isFinite(r["impressions"]) ? r["impressions"] : 0;
-        const position: number = typeof r["position"] === "number" && Number.isFinite(r["position"]) ? r["position"] : 0;
-        const ctr: number = typeof r["ctr"] === "number" && Number.isFinite(r["ctr"]) ? r["ctr"] : 0;
+        const clicks: number =
+          typeof r["clicks"] === "number" && Number.isFinite(r["clicks"]) ? r["clicks"] : 0;
+        const impressions: number =
+          typeof r["impressions"] === "number" && Number.isFinite(r["impressions"])
+            ? r["impressions"]
+            : 0;
+        const position: number =
+          typeof r["position"] === "number" && Number.isFinite(r["position"]) ? r["position"] : 0;
+        const ctr: number =
+          typeof r["ctr"] === "number" && Number.isFinite(r["ctr"]) ? r["ctr"] : 0;
 
         totalClicks += clicks;
         totalImpressions += impressions;
@@ -220,13 +223,9 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
       });
 
       const overallCtr =
-        totalImpressions > 0
-          ? ((totalClicks / totalImpressions) * 100).toFixed(2) + "%"
-          : "0.00%";
+        totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100).toFixed(2) + "%" : "0.00%";
       const overallPosition =
-        totalImpressions > 0
-          ? (weightedPositionSum / totalImpressions).toFixed(1)
-          : "0.0";
+        totalImpressions > 0 ? (weightedPositionSum / totalImpressions).toFixed(1) : "0.0";
 
       return {
         engine: "google",
@@ -244,14 +243,14 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
         effectiveLimit,
       };
     } catch (err: unknown) {
-      throw new Error(formatGoogleError(err));
+      throw new Error(formatGoogleError(err), { cause: err });
     }
   }
 
   async inspectUrl(
     siteUrl: string,
     inspectionUrl: string,
-    languageCode = "en-US"
+    languageCode = "en-US",
   ): Promise<UrlInspectionResult> {
     try {
       const cleanSite: string = siteUrl.trim();
@@ -319,7 +318,7 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
           : undefined,
       };
     } catch (err: unknown) {
-      throw new Error(formatGoogleError(err));
+      throw new Error(formatGoogleError(err), { cause: err });
     }
   }
 
@@ -349,7 +348,7 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
         })),
       }));
     } catch (err: unknown) {
-      throw new Error(formatGoogleError(err));
+      throw new Error(formatGoogleError(err), { cause: err });
     }
   }
 
@@ -383,7 +382,7 @@ export class GoogleSearchConsoleProvider implements SearchEngineProvider {
         })),
       };
     } catch (err: unknown) {
-      throw new Error(formatGoogleError(err));
+      throw new Error(formatGoogleError(err), { cause: err });
     }
   }
 }

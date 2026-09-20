@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registry } from "../core/registry.js";
-import { isIndexNowConfigured, getIndexNowConfigurationGuide } from "../providers/indexnow/provider.js";
 import {
-  isIndexingConfigured,
-  getIndexingGuide,
-} from "../providers/google/indexing.js";
+  isIndexNowConfigured,
+  getIndexNowConfigurationGuide,
+} from "../providers/indexnow/provider.js";
+import { isIndexingConfigured, getIndexingGuide } from "../providers/google/indexing.js";
 
 export function registerEngineStatusTool(server: McpServer): void {
   server.tool(
@@ -26,20 +26,20 @@ export function registerEngineStatusTool(server: McpServer): void {
           p.engine === "google"
             ? "Service Account JSON / ADC"
             : p.engine === "bing"
-            ? "API Key (BING_WEBMASTER_API_KEY)"
-            : "Unknown";
+              ? "API Key (BING_WEBMASTER_API_KEY)"
+              : "Unknown";
 
         lines.push(`| ${p.displayName} | \`${p.engine}\` | ${statusBadge} | ${authMethod} |`);
       }
 
       const indexNowStatus = isIndexNowConfigured() ? "✅ Connected" : "❌ Not Configured";
       lines.push(
-        `| IndexNow (Instant Indexing) | \`indexnow\` | ${indexNowStatus} | API Key (INDEXNOW_KEY) |`
+        `| IndexNow (Instant Indexing) | \`indexnow\` | ${indexNowStatus} | API Key (INDEXNOW_KEY) |`,
       );
 
       const indexingStatus = isIndexingConfigured() ? "✅ Connected" : "❌ Not Configured";
       lines.push(
-        `| Google Indexing API (JobPosting/BroadcastEvent, 200/day) | \`google-indexing\` | ${indexingStatus} | Service Account JSON + Indexing API enabled |`
+        `| Google Indexing API (JobPosting/BroadcastEvent, 200/day) | \`google-indexing\` | ${indexingStatus} | Service Account JSON + Indexing API enabled |`,
       );
 
       lines.push("");
@@ -76,6 +76,6 @@ export function registerEngineStatusTool(server: McpServer): void {
           },
         ],
       };
-    }
+    },
   );
 }

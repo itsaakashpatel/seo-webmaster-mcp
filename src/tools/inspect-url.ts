@@ -22,7 +22,7 @@ export function registerInspectUrlTool(server: McpServer): void {
         .string()
         .min(1)
         .describe(
-          "Site URL as verified in Search Console (e.g. https://example.com/ or sc-domain:example.com)"
+          "Site URL as verified in Search Console (e.g. https://example.com/ or sc-domain:example.com)",
         ),
       inspectionUrl: z
         .string()
@@ -131,6 +131,6 @@ export function registerInspectUrlTool(server: McpServer): void {
       } catch (error: unknown) {
         return errText(`Error inspecting URL: ${getErrorMessage(error)}`);
       }
-    }
+    },
   );
 }

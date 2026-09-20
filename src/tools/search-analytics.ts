@@ -16,7 +16,7 @@ export function registerSearchAnalyticsTool(server: McpServer): void {
         .string()
         .min(1)
         .describe(
-          "Site URL exactly as verified in Search Console (e.g. https://example.com/ or sc-domain:example.com)"
+          "Site URL exactly as verified in Search Console (e.g. https://example.com/ or sc-domain:example.com)",
         ),
       startDate: dateSchema.describe("Start date in YYYY-MM-DD format (e.g. 2026-08-01)"),
       endDate: dateSchema.describe("End date in YYYY-MM-DD format (e.g. 2026-08-28)"),
@@ -29,7 +29,7 @@ export function registerSearchAnalyticsTool(server: McpServer): void {
         .string()
         .optional()
         .describe(
-          "Comma-separated dimensions to group by: query, page, country, device, searchAppearance, date. Default: 'query'"
+          "Comma-separated dimensions to group by: query, page, country, device, searchAppearance, date. Default: 'query'",
         ),
       rowLimit: z
         .number()
@@ -48,20 +48,22 @@ export function registerSearchAnalyticsTool(server: McpServer): void {
         .enum(["all", "final"])
         .optional()
         .default("all")
-        .describe("Data freshness (Google): 'all' includes fresh (recent ~2 days) data, 'final' only finalized"),
+        .describe(
+          "Data freshness (Google): 'all' includes fresh (recent ~2 days) data, 'final' only finalized",
+        ),
       queryFilter: z
         .string()
         .max(200)
         .optional()
         .describe(
-          "Filter queries: plain text (contains), 'exact:keyword', 'regex:pattern', or '!regex:pattern'"
+          "Filter queries: plain text (contains), 'exact:keyword', 'regex:pattern', or '!regex:pattern'",
         ),
       pageFilter: z
         .string()
         .max(200)
         .optional()
         .describe(
-          "Filter page URLs: plain text (contains), 'exact:url', 'regex:pattern', or '!regex:pattern'"
+          "Filter page URLs: plain text (contains), 'exact:url', 'regex:pattern', or '!regex:pattern'",
         ),
       countryFilter: z
         .string()
@@ -121,7 +123,7 @@ export function registerSearchAnalyticsTool(server: McpServer): void {
         if (result.rows.length === 0) {
           const note: string = result.note ? `\n\nNote: ${result.note}` : "";
           return okText(
-            `No search analytics data found for **${siteUrl}** on **${provider.displayName}** between ${startDate} and ${endDate}.${note}`
+            `No search analytics data found for **${siteUrl}** on **${provider.displayName}** between ${startDate} and ${endDate}.${note}`,
           );
         }
 
@@ -141,9 +143,15 @@ export function registerSearchAnalyticsTool(server: McpServer): void {
           while (keys.length < result.columns.length) {
             keys.push("-");
           }
-          const ctr: string = Number.isFinite(row.ctr) ? ((row.ctr || 0) * 100).toFixed(2) + "%" : "0.00%";
-          const pos: string = Number.isFinite(row.position) ? (row.position || 0).toFixed(1) : "0.0";
-          const clicks: string = Number.isFinite(row.clicks) ? (row.clicks || 0).toLocaleString() : "0";
+          const ctr: string = Number.isFinite(row.ctr)
+            ? ((row.ctr || 0) * 100).toFixed(2) + "%"
+            : "0.00%";
+          const pos: string = Number.isFinite(row.position)
+            ? (row.position || 0).toFixed(1)
+            : "0.0";
+          const clicks: string = Number.isFinite(row.clicks)
+            ? (row.clicks || 0).toLocaleString()
+            : "0";
           const impressions: string = Number.isFinite(row.impressions)
             ? (row.impressions || 0).toLocaleString()
             : "0";
@@ -171,6 +179,6 @@ export function registerSearchAnalyticsTool(server: McpServer): void {
       } catch (error: unknown) {
         return errText(`Error querying search analytics: ${getErrorMessage(error)}`);
       }
-    }
+    },
   );
 }

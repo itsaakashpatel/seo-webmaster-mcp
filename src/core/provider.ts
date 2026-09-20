@@ -34,11 +34,7 @@ export interface SearchEngineProvider {
   /**
    * Inspect live indexing & crawl status of a URL (if supported by provider).
    */
-  inspectUrl?(
-    siteUrl: string,
-    url: string,
-    language?: string
-  ): Promise<UrlInspectionResult>;
+  inspectUrl?(siteUrl: string, url: string, language?: string): Promise<UrlInspectionResult>;
 
   /**
    * List submitted sitemaps and their indexing status.
