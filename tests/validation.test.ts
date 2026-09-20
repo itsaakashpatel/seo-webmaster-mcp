@@ -29,7 +29,7 @@ test("validateDateRange rejects invalid date format or out-of-order range", () =
 });
 
 test("buildSafeRegExp compiles valid regex case-insensitively", () => {
-  const re = buildSafeRegExp("^https://example\\.com/blog", "test");
+  const re: RegExp = buildSafeRegExp("^https://example\\.com/blog", "test");
   assert.ok(re instanceof RegExp);
   assert.ok(re.test("HTTPS://EXAMPLE.COM/BLOG/POST-1"));
 });
@@ -62,14 +62,8 @@ test("normalizeHost rejects invalid domain strings", () => {
 });
 
 test("normalizeSitemapKey strips trailing slashes and normalizes host/path", () => {
-  assert.equal(
-    normalizeSitemapKey("https://example.com/sitemap.xml/"),
-    "example.com/sitemap.xml",
-  );
-  assert.equal(
-    normalizeSitemapKey("/sitemaps/posts.xml/"),
-    "/sitemaps/posts.xml",
-  );
+  assert.equal(normalizeSitemapKey("https://example.com/sitemap.xml/"), "example.com/sitemap.xml");
+  assert.equal(normalizeSitemapKey("/sitemaps/posts.xml/"), "/sitemaps/posts.xml");
 });
 
 test("clampRowLimit respects bounds and falls back on NaN/undefined", () => {

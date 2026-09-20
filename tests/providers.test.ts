@@ -10,34 +10,37 @@ import {
 import { isIndexNowConfigured } from "../build/providers/indexnow/provider.js";
 
 test("formatBingError formats 401 unauthorized with setup guidance", () => {
-  const err = { code: 401, message: "Invalid API Key" };
-  const msg = formatBingError(err);
+  const err: Record<string, unknown> = { code: 401, message: "Invalid API Key" };
+  const msg: string = formatBingError(err);
   assert.ok(msg.includes("401 Invalid API Key"));
   assert.ok(msg.includes("BING_WEBMASTER_API_KEY"));
 });
 
 test("formatBingError formats 403 forbidden", () => {
-  const err = { code: 403, message: "Access denied" };
-  const msg = formatBingError(err);
+  const err: Record<string, unknown> = { code: 403, message: "Access denied" };
+  const msg: string = formatBingError(err);
   assert.ok(msg.includes("Bing Webmaster permission denied (403)"));
 });
 
 test("formatGoogleError formats 403 permission error with user role tip", () => {
-  const err = { code: 403, message: "User does not have sufficient permission" };
-  const msg = formatGoogleError(err);
+  const err: Record<string, unknown> = {
+    code: 403,
+    message: "User does not have sufficient permission",
+  };
+  const msg: string = formatGoogleError(err);
   assert.ok(msg.includes("Permission error (403)"));
   assert.ok(msg.includes("Restricted"));
 });
 
 test("formatGoogleError formats 429 quota error", () => {
-  const err = { code: 429, message: "Quota exceeded" };
-  const msg = formatGoogleError(err);
+  const err: Record<string, unknown> = { code: 429, message: "Quota exceeded" };
+  const msg: string = formatGoogleError(err);
   assert.ok(msg.includes("Quota exceeded (429)"));
   assert.ok(msg.includes("200 publish requests per day"));
 });
 
 test("normalizeGoogleDimensions filters unsupported dimensions", () => {
-  const result = normalizeGoogleDimensions(["query", "invalid_dim", "page", "date"]);
+  const result: string[] = normalizeGoogleDimensions(["query", "invalid_dim", "page", "date"]);
   assert.deepEqual(result, ["query", "page", "date"]);
 });
 

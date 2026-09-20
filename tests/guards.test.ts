@@ -1,11 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  isRecord,
-  asRecord,
-  asFiniteNumber,
-  asString,
-} from "../build/core/guards.js";
+import { isRecord, asRecord, asFiniteNumber, asString } from "../build/core/guards.js";
 
 test("isRecord correctly identifies non-null non-array objects", () => {
   assert.equal(isRecord({ a: 1 }), true);
@@ -18,7 +13,7 @@ test("isRecord correctly identifies non-null non-array objects", () => {
 });
 
 test("asRecord returns record or throws descriptive error", () => {
-  const obj = { foo: "bar" };
+  const obj: Record<string, unknown> = { foo: "bar" };
   assert.equal(asRecord(obj, "test"), obj);
   assert.throws(() => asRecord("bad", "item"), {
     message: /Invalid item: expected an object/,

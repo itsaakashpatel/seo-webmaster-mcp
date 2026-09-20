@@ -10,7 +10,7 @@ test("getErrorCode extracts integer codes from direct properties", () => {
 });
 
 test("getErrorCode extracts codes from Axios / Gaxios error structure", () => {
-  const gaxiosError = {
+  const gaxiosError: Record<string, unknown> = {
     response: {
       status: 401,
       data: {
