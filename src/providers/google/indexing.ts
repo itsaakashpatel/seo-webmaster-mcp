@@ -68,40 +68,54 @@ export async function submitToGoogleIndexing(options: {
 
   const client = getGoogleIndexingClient();
   const items: GoogleIndexingItemResult[] = [];
+  const BATCH_CONCURRENCY = 5;
+  let quotaExhausted = false;
 
-  for (const url of deduped) {
-    try {
-      const res = await client.urlNotifications.publish({
-        requestBody: { url, type: notificationType },
-      });
-      const meta = res.data.urlNotificationMetadata;
-      const notifyTime: string | undefined =
-        meta?.latestUpdate?.notifyTime ?? meta?.latestRemove?.notifyTime ?? undefined;
-      items.push({
-        url,
-        type: notificationType,
-        success: true,
-        statusCode: 200,
-        message:
-          "Notification accepted. Google may recrawl (update) or drop (delete) the URL soon.",
-        notifyTime,
-      });
-    } catch (err: unknown) {
-      items.push(toItemError(url, notificationType, err));
-      const code: number | undefined = getErrorCode(err);
-      if (code === 429) {
-        const remaining: string[] = deduped.slice(items.length);
-        for (const rest of remaining) {
-          items.push({
-            url: rest,
-            type: notificationType,
-            success: false,
-            statusCode: 429,
-            message:
-              "Skipped: quota exhausted earlier in this batch (429). Retry remaining URLs tomorrow.",
+  for (let i = 0; i < deduped.length; i += BATCH_CONCURRENCY) {
+    if (quotaExhausted) {
+      const remaining: string[] = deduped.slice(i);
+      for (const rest of remaining) {
+        items.push({
+          url: rest,
+          type: notificationType,
+          success: false,
+          statusCode: 429,
+          message:
+            "Skipped: quota exhausted earlier in this batch (429). Retry remaining URLs tomorrow.",
+        });
+      }
+      break;
+    }
+
+    const batch: string[] = deduped.slice(i, i + BATCH_CONCURRENCY);
+    const batchResults: GoogleIndexingItemResult[] = await Promise.all(
+      batch.map(async (url: string) => {
+        try {
+          const res = await client.urlNotifications.publish({
+            requestBody: { url, type: notificationType },
           });
+          const meta = res.data.urlNotificationMetadata;
+          const notifyTime: string | undefined =
+            meta?.latestUpdate?.notifyTime ?? meta?.latestRemove?.notifyTime ?? undefined;
+          return {
+            url,
+            type: notificationType,
+            success: true,
+            statusCode: 200,
+            message:
+              "Notification accepted. Google may recrawl (update) or drop (delete) the URL soon.",
+            notifyTime,
+          };
+        } catch (err: unknown) {
+          return toItemError(url, notificationType, err);
         }
-        break;
+      }),
+    );
+
+    for (const item of batchResults) {
+      items.push(item);
+      if (item.statusCode === 429) {
+        quotaExhausted = true;
       }
     }
   }

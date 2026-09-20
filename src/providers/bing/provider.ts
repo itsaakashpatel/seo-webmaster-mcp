@@ -73,7 +73,7 @@ interface BingQueryRow {
   AvgImpressionPosition?: unknown;
 }
 
-type BingTextField = "Query" | "Page";
+type BingTextField = "Query";
 
 function toNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
@@ -156,7 +156,15 @@ export class BingWebmasterProvider implements SearchEngineProvider {
       if (siteUrl.length === 0) {
         throw new Error("siteUrl is empty.");
       }
-      const data: unknown = await bingFetch("GetQueryStats", { siteUrl });
+      const requestedDimensions: string[] = query.dimensions
+        ? query.dimensions.map((d: string) => d.toLowerCase())
+        : [];
+      const isPageMode: boolean =
+        (requestedDimensions.includes("page") && !requestedDimensions.includes("query")) ||
+        Boolean(query.pageFilter && !query.queryFilter);
+
+      const endpoint: string = isPageMode ? "GetPageStats" : "GetQueryStats";
+      const data: unknown = await bingFetch(endpoint, { siteUrl });
       const raw: unknown[] = Array.isArray(data) ? data : [];
       const rawRows: BingQueryRow[] = raw.filter(
         (entry: unknown): entry is BingQueryRow => typeof entry === "object" && entry !== null,
@@ -164,11 +172,14 @@ export class BingWebmasterProvider implements SearchEngineProvider {
 
       let filteredRows: BingQueryRow[] = rawRows;
 
-      if (query.queryFilter) {
-        filteredRows = applyTextFilter(filteredRows, "Query", query.queryFilter);
-      }
-      if (query.pageFilter) {
-        filteredRows = applyTextFilter(filteredRows, "Page", query.pageFilter);
+      if (isPageMode) {
+        if (query.pageFilter) {
+          filteredRows = applyTextFilter(filteredRows, "Query", query.pageFilter);
+        }
+      } else {
+        if (query.queryFilter) {
+          filteredRows = applyTextFilter(filteredRows, "Query", query.queryFilter);
+        }
       }
 
       const effectiveLimit: number = clampRowLimit(query.rowLimit, BING_MAX_ROWS, 100);
@@ -203,15 +214,30 @@ export class BingWebmasterProvider implements SearchEngineProvider {
       const overallPosition: string =
         totalImpressions > 0 ? (weightedPositionSum / totalImpressions).toFixed(1) : "0.0";
 
-      const notes: string[] = [
-        "Bing GetQueryStats does not support server-side date ranges, dimensions, country/device filters, or searchType; filtering is applied client-side to query/page text only.",
-      ];
+      const notes: string[] = [];
+      if (isPageMode) {
+        notes.push(
+          "Bing GetPageStats provides page-level traffic metrics. Date ranges, dimensions, country/device filters, and searchType are not supported server-side.",
+        );
+        if (query.queryFilter) {
+          notes.push("queryFilter was ignored because page mode was active.");
+        }
+      } else {
+        notes.push(
+          "Bing GetQueryStats provides query-level metrics. Date ranges, dimensions, country/device filters, and searchType are not supported server-side.",
+        );
+        if (query.pageFilter) {
+          notes.push(
+            "pageFilter was ignored because query mode was active. Specify dimensions: ['page'] to query page stats.",
+          );
+        }
+      }
       if (query.countryFilter || query.deviceFilter || query.searchType || query.dataState) {
         notes.push("countryFilter, deviceFilter, searchType, and dataState are ignored for Bing.");
       }
       if (query.dimensions && query.dimensions.length > 0) {
         notes.push(
-          `Requested dimensions [${query.dimensions.join(", ")}] are not supported; Bing returns query-level rows only.`,
+          `Requested dimensions [${query.dimensions.join(", ")}] are not fully supported; Bing returns ${isPageMode ? "page" : "query"}-level rows only.`,
         );
       }
 
@@ -220,7 +246,7 @@ export class BingWebmasterProvider implements SearchEngineProvider {
         siteUrl: query.siteUrl,
         startDate: query.startDate,
         endDate: query.endDate,
-        columns: ["query"],
+        columns: [isPageMode ? "page" : "query"],
         summary: {
           totalClicks,
           totalImpressions,

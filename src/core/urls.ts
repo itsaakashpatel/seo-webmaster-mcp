@@ -81,6 +81,20 @@ export function parseUrlList(raw: string): string[] {
   if (trimmed.length === 0) {
     return [];
   }
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed: unknown = JSON.parse(trimmed);
+      if (typeof parsed === "object" && parsed !== null && "urls" in parsed) {
+        const candidate: unknown = (parsed as Record<string, unknown>)["urls"];
+        if (Array.isArray(candidate)) {
+          return parseJsonStringArray(JSON.stringify(candidate));
+        }
+      }
+    } catch {
+      // ignore
+    }
+    throw new Error('URL JSON must be an array of strings (e.g. ["https://..."]).');
+  }
   if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
     try {
       return parseJsonStringArray(trimmed);

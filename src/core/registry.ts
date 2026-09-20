@@ -1,14 +1,14 @@
 import { SearchEngineProvider } from "./provider.js";
-import { EngineType } from "./types.js";
+import { QueryEngineType } from "./types.js";
 
 class ProviderRegistry {
-  private providers: Map<EngineType, SearchEngineProvider> = new Map();
+  private providers: Map<QueryEngineType, SearchEngineProvider> = new Map();
 
   register(provider: SearchEngineProvider): void {
     this.providers.set(provider.engine, provider);
   }
 
-  get(engine: EngineType): SearchEngineProvider | undefined {
+  get(engine: QueryEngineType): SearchEngineProvider | undefined {
     return this.providers.get(engine);
   }
 

@@ -1,4 +1,5 @@
-export type EngineType = "google" | "bing" | "indexnow";
+export type QueryEngineType = "google" | "bing";
+export type EngineType = QueryEngineType | "indexnow";
 
 export type SearchType = "web" | "image" | "video" | "news" | "discover" | "googleNews";
 export type DataState = "all" | "final";
@@ -7,7 +8,7 @@ export type DeviceFilter = "DESKTOP" | "MOBILE" | "TABLET";
 export interface SiteInfo {
   readonly siteUrl: string;
   readonly permissionLevel: string;
-  readonly engine: EngineType;
+  readonly engine: QueryEngineType;
 }
 
 export interface SearchAnalyticsQuery {
@@ -41,7 +42,7 @@ export interface AnalyticsSummary {
 }
 
 export interface AnalyticsResult {
-  engine: EngineType;
+  engine: QueryEngineType;
   siteUrl: string;
   startDate: string;
   endDate: string;
@@ -53,7 +54,7 @@ export interface AnalyticsResult {
 }
 
 export interface UrlInspectionResult {
-  engine: EngineType;
+  engine: QueryEngineType;
   inspectionUrl: string;
   siteUrl: string;
   verdict: string;
@@ -92,7 +93,7 @@ export interface UrlInspectionResult {
 
 export interface SitemapInfo {
   path: string;
-  engine: EngineType;
+  engine: QueryEngineType;
   lastSubmitted?: string;
   lastDownloaded?: string;
   type?: string;

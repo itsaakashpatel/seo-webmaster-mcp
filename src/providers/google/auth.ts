@@ -154,6 +154,15 @@ export function getGoogleIndexingClient(): indexing_v3.Indexing {
     return cachedIndexingClient;
   }
   const credentials: unknown = buildCredentials();
+  if (credentials === undefined) {
+    try {
+      const auth = new google.auth.GoogleAuth({ scopes: INDEXING_SCOPES });
+      cachedIndexingClient = google.indexing({ version: "v3", auth });
+      return cachedIndexingClient;
+    } catch {
+      throw new Error(getGoogleIndexingConfigurationGuide());
+    }
+  }
   const auth = createGoogleAuth(credentials, INDEXING_SCOPES);
   cachedIndexingClient = google.indexing({ version: "v3", auth });
   return cachedIndexingClient;

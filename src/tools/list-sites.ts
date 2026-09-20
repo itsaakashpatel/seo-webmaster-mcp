@@ -1,11 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { registry } from "../core/registry.js";
-import { SiteInfo, EngineType } from "../core/types.js";
+import { SiteInfo, QueryEngineType } from "../core/types.js";
 import { getErrorMessage } from "../core/errors.js";
 import { okText, errText } from "../core/responses.js";
 
-function toEngine(value: string): EngineType | undefined {
+function toEngine(value: string): QueryEngineType | undefined {
   if (value === "google" || value === "bing") {
     return value;
   }
@@ -27,9 +27,9 @@ export function registerListSitesTool(server: McpServer): void {
     },
     async ({ engine }) => {
       try {
-        const targetEngines: EngineType[] = engine === "all" ? ["google", "bing"] : [];
+        const targetEngines: QueryEngineType[] = engine === "all" ? ["google", "bing"] : [];
         if (engine !== "all") {
-          const single: EngineType | undefined = toEngine(engine);
+          const single: QueryEngineType | undefined = toEngine(engine);
           if (!single) {
             throw new Error(`Unknown engine "${engine}".`);
           }

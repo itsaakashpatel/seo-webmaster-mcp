@@ -1,5 +1,5 @@
 import {
-  EngineType,
+  QueryEngineType,
   SiteInfo,
   SearchAnalyticsQuery,
   AnalyticsResult,
@@ -8,7 +8,7 @@ import {
 } from "./types.js";
 
 export interface SearchEngineProvider {
-  readonly engine: EngineType;
+  readonly engine: QueryEngineType;
   readonly displayName: string;
 
   /**

@@ -15,6 +15,7 @@
     "lint:fix": "oxlint --fix",
     "format": "oxfmt --write src",
     "format:check": "oxfmt --check src",
+    "test": "npm run build && node --test tests/**/*.test.js",
     "prepare": "npm run build"
   },
   "repository": {
