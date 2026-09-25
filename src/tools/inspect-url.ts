@@ -71,7 +71,7 @@ function renderRichResultGroup(group: RichResultGroup): string[] {
   const items = group.items.flatMap((item) =>
     item.issues.length > 0
       ? item.issues.map(
-          (issue) => `    - ${severityPrefix(issue)}${issue.message ?? "Schema issue"}`,
+          (issue) => `    - ${severityPrefix(issue)}${issue.message || "Schema issue"}`,
         )
       : [`    - Valid${item.name ? ` (${item.name})` : ""}`],
   );

@@ -58,7 +58,7 @@ function toStringList(list: unknown): string[] {
   if (strings.length !== list.length) {
     throw new Error(NON_STRING_ERROR);
   }
-  return splitDelimitedList(strings.join("\n"));
+  return strings.map((url) => url.trim()).filter((url) => url.length > 0);
 }
 
 /**

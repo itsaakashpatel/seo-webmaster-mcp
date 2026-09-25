@@ -1,22 +1,15 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { code, formatCount, formatDate, markdownTable } from "../core/markdown.js";
+import { code, formatDate, markdownTable } from "../core/markdown.js";
 import { okText } from "../core/responses.js";
 import type { SitemapInfo } from "../core/types.js";
 import { providers } from "../providers/index.js";
-import { READ_ONLY, engineSchema, siteUrlSchema, withErrorBoundary } from "./shared.js";
-
-/** Renders the indexed / submitted breakdown. Bing has only a submitted count. */
-export function renderSitemapCounts(sitemap: SitemapInfo): string[] {
-  if (sitemap.contents?.length) {
-    return sitemap.contents.map(
-      (content) =>
-        `- **${content.type}**: ${formatCount(content.indexed)} indexed / ${formatCount(content.submitted)} submitted`,
-    );
-  }
-  return sitemap.submittedUrls === undefined
-    ? []
-    : [`- **Submitted URLs**: ${formatCount(sitemap.submittedUrls)}`];
-}
+import {
+  READ_ONLY,
+  engineSchema,
+  renderSitemapCounts,
+  siteUrlSchema,
+  withErrorBoundary,
+} from "./shared.js";
 
 export function renderSitemaps(
   siteUrl: string,
@@ -29,9 +22,9 @@ export function renderSitemaps(
       code(sitemap.path),
       formatDate(sitemap.lastSubmitted, "never"),
       formatDate(sitemap.lastDownloaded, "never"),
-      sitemap.type ?? "Sitemap",
+      sitemap.type || "Sitemap",
       sitemap.errors ?? "-",
-      sitemap.status ?? "Unknown",
+      sitemap.status || "Unknown",
     ]),
   );
   const breakdown = sitemaps.flatMap((sitemap) => {

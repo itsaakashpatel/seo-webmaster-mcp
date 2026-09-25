@@ -107,3 +107,11 @@ test("parseUrlList returns empty array for empty or whitespace-only input", () =
   assert.deepEqual(parseUrlList(""), []);
   assert.deepEqual(parseUrlList("   \n\r\n  "), []);
 });
+
+test("parseUrlList keeps commas inside JSON array entries", () => {
+  assert.deepEqual(parseUrlList('["https://a.com/p?x=1,2", " https://a.com/q "]'), [
+    "https://a.com/p?x=1,2",
+    "https://a.com/q",
+  ]);
+  assert.deepEqual(parseUrlList('{"urls": ["https://a.com/p?x=1,2"]}'), ["https://a.com/p?x=1,2"]);
+});

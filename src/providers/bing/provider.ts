@@ -132,6 +132,9 @@ export class BingWebmasterProvider implements SearchEngineProvider {
   /** Bing has no URL-level inspection. The result is UNKNOWN, with site-level crawl context. */
   inspectUrl(siteUrl: string, url: string): Promise<UrlInspectionResult> {
     return withBingErrors(async () => {
+      if (!isBingConfigured()) {
+        throw new Error(BING_SETUP_GUIDE);
+      }
       const site = requireText(siteUrl, "siteUrl");
       const inspectionUrl = requireText(url, "inspectionUrl");
       const crawlStats = await bingGet("GetCrawlStats", { siteUrl: site }).catch(

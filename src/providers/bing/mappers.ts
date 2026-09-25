@@ -8,7 +8,9 @@ type BingRecord = Record<string, unknown>;
 const WCF_DATE_RE = /^\/?Date\(([+-]?\d+)(?:[+-]\d{4})?\)\/?$/i;
 
 function toIsoString(epochMs: number): string | undefined {
-  return Number.isFinite(epochMs) ? new Date(epochMs).toISOString() : undefined;
+  const date = new Date(epochMs);
+  // An out-of-range epoch gives an Invalid Date, and toISOString() would throw.
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 /** Converts a Bing date (WCF string, ISO string, or epoch number) to an ISO string. */

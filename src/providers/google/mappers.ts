@@ -12,8 +12,9 @@ import type {
 type Nullable<T> = T | null | undefined;
 
 // googleapis marks every field as `T | null | undefined`. Domain types use `T | undefined`.
-function orUndefined<T>(value: Nullable<T>): T | undefined {
-  return value ?? undefined;
+// `||`, not `??`: the API can send "" for a field with no value.
+function orUndefined<T extends string | readonly string[]>(value: Nullable<T>): T | undefined {
+  return value || undefined;
 }
 
 function toCount(value: Nullable<string | number>): number {
@@ -22,8 +23,8 @@ function toCount(value: Nullable<string | number>): number {
 
 export function toSiteInfo(entry: searchconsole_v1.Schema$WmxSite): SiteInfo {
   return {
-    siteUrl: entry.siteUrl ?? "",
-    permissionLevel: entry.permissionLevel ?? "unknown",
+    siteUrl: entry.siteUrl || "",
+    permissionLevel: entry.permissionLevel || "unknown",
     engine: "google",
   };
 }
@@ -54,7 +55,7 @@ export function toSitemapInfo(
     warnings: toCount(sitemap.warnings),
     status: sitemap.isPending ? "Pending" : status,
     contents: (sitemap.contents ?? []).map((content) => ({
-      type: content.type ?? "web",
+      type: content.type || "web",
       submitted: toCount(content.submitted),
       indexed: toCount(content.indexed),
     })),
@@ -68,9 +69,9 @@ function toMobileUsability(
     return undefined;
   }
   return {
-    verdict: result.verdict ?? "UNKNOWN",
+    verdict: result.verdict || "UNKNOWN",
     issues: (result.issues ?? []).map((issue) => ({
-      issueType: issue.issueType ?? "UsabilityIssue",
+      issueType: issue.issueType || "UsabilityIssue",
       severity: orUndefined(issue.severity),
       message: orUndefined(issue.message),
     })),
@@ -84,9 +85,9 @@ function toRichResults(
     return undefined;
   }
   return {
-    verdict: result.verdict ?? "UNKNOWN",
+    verdict: result.verdict || "UNKNOWN",
     detectedItems: (result.detectedItems ?? []).map((group) => ({
-      type: group.richResultType ?? "RichResult",
+      type: group.richResultType || "RichResult",
       items: (group.items ?? []).map((item) => ({
         name: orUndefined(item.name),
         issues: (item.issues ?? []).map((issue) => ({
@@ -108,7 +109,7 @@ export function toInspectionResult(
     engine: "google",
     inspectionUrl,
     siteUrl,
-    verdict: index.verdict ?? "UNKNOWN",
+    verdict: index.verdict || "UNKNOWN",
     coverageState: orUndefined(index.coverageState),
     indexingState: orUndefined(index.indexingState),
     lastCrawlTime: orUndefined(index.lastCrawlTime),

@@ -283,3 +283,19 @@ test("BingWebmasterProvider.inspectUrl labels site-level crawl context and selec
     globalThis.fetch = originalFetch;
   }
 });
+
+test("BingWebmasterProvider.inspectUrl returns the setup guide when no API key is set", async () => {
+  const originalKey = process.env.BING_WEBMASTER_API_KEY;
+  delete process.env.BING_WEBMASTER_API_KEY;
+  try {
+    const provider = new BingWebmasterProvider();
+    await assert.rejects(
+      provider.inspectUrl("https://example.com", "https://example.com/a"),
+      /Bing Webmaster Tools is not configured/,
+    );
+  } finally {
+    if (originalKey !== undefined) {
+      process.env.BING_WEBMASTER_API_KEY = originalKey;
+    }
+  }
+});

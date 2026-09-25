@@ -59,7 +59,7 @@ src/
     index.ts          The static `providers` map: QueryEngineType -> SearchEngineProvider.
     google/ bing/ indexnow/
   tools/              One MCP tool per file. Validates input, calls a provider, renders Markdown.
-    shared.ts         Shared zod schemas, tool annotations, and the error boundary.
+    shared.ts         Shared zod schemas, tool annotations, render helpers, and the error boundary.
     index.ts          `registerAllTools(server)`.
 ```
 

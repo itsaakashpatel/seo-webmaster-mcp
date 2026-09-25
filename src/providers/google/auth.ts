@@ -68,8 +68,9 @@ let adcDetected = false;
 function getAdcFilePath(): string | undefined {
   const { CLOUDSDK_CONFIG, APPDATA, HOME } = process.env;
   const configDir =
-    CLOUDSDK_CONFIG ??
-    (APPDATA ? join(APPDATA, "gcloud") : undefined) ??
+    // `||`, not `??`: MCP clients often pass an empty string for an unset variable.
+    CLOUDSDK_CONFIG ||
+    (APPDATA ? join(APPDATA, "gcloud") : undefined) ||
     (HOME ? join(HOME, ".config", "gcloud") : undefined);
   return configDir ? join(configDir, "application_default_credentials.json") : undefined;
 }
@@ -142,7 +143,13 @@ function readCredentialsFile(path: string): string {
   if (!existsSync(path)) {
     throw new Error(`Credentials file not found at: "${name}".`);
   }
-  return readFileSync(path, "utf-8");
+  try {
+    return readFileSync(path, "utf-8");
+  } catch (err: unknown) {
+    // The raw fs error contains the full path. Report only the base name and the error code.
+    const code = isRecord(err) && typeof err.code === "string" ? err.code : "read error";
+    throw new Error(`Failed to read credentials file "${name}" (${code}).`, { cause: err });
+  }
 }
 
 /** Loads explicit service-account credentials. Returns `undefined` to fall back to ADC. */

@@ -10,7 +10,7 @@ This document defines the specification and runtime contract for the eight Model
 - For `list_sites`, the allowed values are `"all"`, `"google"`, and `"bing"`. The default value is `"all"`.
 
 ### Site URL Formats
-- The `siteUrl` parameter must be a non-empty string.
+- The `siteUrl` parameter must be a non-empty string after trimming. An empty or whitespace-only value is rejected with an invalid-params error.
 - Provide the exact site property identifier as verified in the search engine.
 - For URL-prefix properties, provide the full URL including protocol and trailing slash (for example, `https://example.com/`).
 - For Google domain properties, provide the domain with the domain prefix (for example, `sc-domain:example.com`).
@@ -153,7 +153,6 @@ Read-only (`readOnlyHint: true`, `openWorldHint: true`).
 - Returns `Error querying search analytics: Invalid date format. Use YYYY-MM-DD (got "<startDate>" to "<endDate>").`
 - Returns `Error querying search analytics: Invalid calendar date "<date>".`
 - Returns `Error querying search analytics: Invalid date range: startDate "<start>" is after endDate "<end>".`
-- Returns `Error querying search analytics: siteUrl must be non-empty.`
 - Returns `Error querying search analytics: Invalid countryFilter "<value>". Use ISO 3166-1 alpha-3 (e.g. USA, GBR).`
 - Returns `Error querying search analytics: Invalid <label>: "<prefix>" needs a non-empty value.`
 - Returns `Error querying search analytics: Invalid <label> regex: pattern exceeds 200 chars.`
@@ -203,8 +202,6 @@ Read-only (`readOnlyHint: true`, `openWorldHint: true`).
 
 ### Errors
 - Rejects the call with an invalid-params error if `inspectionUrl` is not a full HTTP or HTTPS URL.
-- Returns `Error inspecting URL: siteUrl must be non-empty.`
-- Returns `Error inspecting URL: inspectionUrl must be non-empty.`
 - Returns `Error inspecting URL: No inspection result returned for "<inspectionUrl>"` if Google returns an empty payload.
 - Returns `Error inspecting URL: <message>` for provider authentication, permission (403), or network failures.
 
@@ -241,7 +238,6 @@ Read-only (`readOnlyHint: true`, `openWorldHint: true`).
 4. If no sitemaps are found, return a message stating that no sitemaps exist for the property.
 
 ### Errors
-- Returns `Error listing sitemaps: siteUrl must be non-empty.`
 - Returns `Error listing sitemaps: <message>` for provider authentication or API failures.
 
 ### Limits
@@ -277,8 +273,6 @@ Read-only (`readOnlyHint: true`, `openWorldHint: true`).
 3. Render sitemap metadata and contents breakdown in Markdown format.
 
 ### Errors
-- Returns `Error getting sitemap details: siteUrl must be non-empty.`
-- Returns `Error getting sitemap details: feedpath must be non-empty.`
 - Returns `Error getting sitemap details: Sitemap feed "<feedpath>" not found in Bing Webmaster Tools for <siteUrl>` if the feed does not match any Bing feed.
 - Returns `Error getting sitemap details: <message>` for provider authentication or API failures.
 

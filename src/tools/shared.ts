@@ -1,8 +1,9 @@
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { getErrorMessage } from "../core/errors.js";
+import { formatCount } from "../core/markdown.js";
 import { errText, type ToolResult } from "../core/responses.js";
-import { QUERY_ENGINES } from "../core/types.js";
+import { QUERY_ENGINES, type SitemapInfo } from "../core/types.js";
 
 export const engineSchema = z
   .enum(QUERY_ENGINES)
@@ -47,4 +48,17 @@ export function withErrorBoundary<Args>(
       return errText(`${errorPrefix}: ${getErrorMessage(err)}`);
     }
   };
+}
+
+/** Renders the indexed / submitted breakdown. Bing has only a submitted count. */
+export function renderSitemapCounts(sitemap: SitemapInfo): string[] {
+  if (sitemap.contents?.length) {
+    return sitemap.contents.map(
+      (content) =>
+        `- **${content.type}**: ${formatCount(content.indexed)} indexed / ${formatCount(content.submitted)} submitted`,
+    );
+  }
+  return sitemap.submittedUrls === undefined
+    ? []
+    : [`- **Submitted URLs**: ${formatCount(sitemap.submittedUrls)}`];
 }

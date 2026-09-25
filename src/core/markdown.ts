@@ -27,7 +27,7 @@ export function formatPercent(fraction: number): string {
 
 /** Keeps only the date part of an ISO timestamp. */
 export function formatDate(iso: string | undefined, fallback: string): string {
-  return iso?.split("T")[0] ?? fallback;
+  return iso?.split("T")[0] || fallback;
 }
 
 /**

@@ -103,6 +103,9 @@ test("parseBingDate parses WCF formats and ISO strings", () => {
   assert.equal(parseBingDate(null), undefined);
   assert.equal(parseBingDate(undefined), undefined);
   assert.equal(parseBingDate("not a date"), undefined);
+  // Finite but outside the Date range: must not throw RangeError.
+  assert.equal(parseBingDate("/Date(99999999999999999)/"), undefined);
+  assert.equal(parseBingDate(1e17), undefined);
 });
 
 test("normalizeHost handles raw domains, prefixes, and ports", () => {

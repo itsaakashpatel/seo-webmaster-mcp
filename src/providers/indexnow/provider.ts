@@ -107,7 +107,7 @@ export async function submitToIndexNow(
     headers: { "Content-Type": "application/json; charset=utf-8", "User-Agent": USER_AGENT },
     body: JSON.stringify(payload),
   });
-  const statusMessage = describeStatus(res.status, await readBodyText(res));
+  const statusMessage = describeStatus(res.status, (await readBodyText(res)) || res.statusText);
   if (!res.ok) {
     throw new HttpError(statusMessage, res.status);
   }

@@ -4,8 +4,13 @@ import { code, fieldList, formatCount } from "../core/markdown.js";
 import { okText } from "../core/responses.js";
 import type { SitemapInfo } from "../core/types.js";
 import { providers } from "../providers/index.js";
-import { renderSitemapCounts } from "./list-sitemaps.js";
-import { READ_ONLY, engineSchema, siteUrlSchema, withErrorBoundary } from "./shared.js";
+import {
+  READ_ONLY,
+  engineSchema,
+  renderSitemapCounts,
+  siteUrlSchema,
+  withErrorBoundary,
+} from "./shared.js";
 
 function optionalCount(value: number | undefined): string | undefined {
   return value === undefined ? undefined : formatCount(value);
@@ -18,10 +23,10 @@ export function renderSitemap(siteUrl: string, providerName: string, sitemap: Si
     ...fieldList([
       ["Provider", providerName],
       ["Site", code(siteUrl)],
-      ["Type", sitemap.type ?? "Sitemap"],
-      ["Status", sitemap.status ?? "Unknown"],
-      ["Last Submitted", sitemap.lastSubmitted ?? "Never"],
-      ["Last Downloaded", sitemap.lastDownloaded ?? "Never"],
+      ["Type", sitemap.type || "Sitemap"],
+      ["Status", sitemap.status || "Unknown"],
+      ["Last Submitted", sitemap.lastSubmitted || "Never"],
+      ["Last Downloaded", sitemap.lastDownloaded || "Never"],
       ["Errors", sitemap.errors ?? "N/A"],
       ["Warnings", sitemap.warnings ?? "N/A"],
       ["Indexed URLs", optionalCount(sitemap.indexedUrls)],
