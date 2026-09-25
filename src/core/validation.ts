@@ -1,3 +1,5 @@
+import { RE2JS } from "re2js";
+
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export const MAX_REGEX_LEN = 200;
 export const MAX_INDEXNOW_URLS = 10000;
@@ -108,30 +110,14 @@ export function parseBingDate(raw: unknown): string | undefined {
   return undefined;
 }
 
-function hasCatastrophicPattern(pattern: string): boolean {
-  let normalized: string = pattern.replace(/\\./g, "_");
-  normalized = normalized.replace(/\[(?:[^\]\\]|\\.)*\]/g, "_");
-
-  if (/(?:[*+]|\{\d+,?\d*\})\s*(?:[*+]|\{\d+,?\d*\})/.test(normalized)) {
-    return true;
-  }
-
-  let simplified: string = normalized;
-  let prev = "";
-  while (simplified !== prev) {
-    prev = simplified;
-    if (/\(([^()]*[+*?]|[^()]*\{\d+,?\d*\})[^()]*\)\s*([*+]|\{\d+,?\d*\})/.test(simplified)) {
-      return true;
-    }
-    if (/\(([^()]*\|[^()]*)\)\s*([*+]|\{\d+,?\d*\})/.test(simplified)) {
-      return true;
-    }
-    simplified = simplified.replace(/\([^()]+\)/g, "X");
-  }
-  return false;
-}
-
-export function buildSafeRegExp(pattern: string, label: string): RegExp {
+/**
+ * Compiles a user-supplied filter pattern with RE2 semantics.
+ *
+ * RE2 matches in linear time, so no pattern can cause catastrophic
+ * backtracking (ReDoS). It also uses the same syntax as the Google Search
+ * Console API, so a `regex:` filter behaves the same way on every engine.
+ */
+export function buildSafeRegExp(pattern: string, label: string): RE2JS {
   const trimmed: string = pattern.trim();
   if (trimmed.length === 0) {
     throw new Error(`Invalid ${label} regex: pattern is empty.`);
@@ -139,13 +125,8 @@ export function buildSafeRegExp(pattern: string, label: string): RegExp {
   if (trimmed.length > MAX_REGEX_LEN) {
     throw new Error(`Invalid ${label} regex: pattern exceeds ${MAX_REGEX_LEN} chars.`);
   }
-  if (hasCatastrophicPattern(trimmed)) {
-    throw new Error(
-      `Invalid ${label} regex "${trimmed}": pattern contains nested or repeated groups susceptible to catastrophic backtracking (ReDoS).`,
-    );
-  }
   try {
-    return new RegExp(trimmed, "i");
+    return RE2JS.compile(trimmed, RE2JS.CASE_INSENSITIVE);
   } catch (err: unknown) {
     const msg: string = err instanceof Error ? err.message : String(err);
     throw new Error(`Invalid ${label} regex "${trimmed}": ${msg}`, { cause: err });

@@ -43,12 +43,14 @@ test("validateDateRange rejects non-existent calendar dates", () => {
 });
 
 test("buildSafeRegExp compiles valid regex case-insensitively", () => {
-  const re: RegExp = buildSafeRegExp("^https://example\\.com/blog", "test");
-  assert.ok(re instanceof RegExp);
+  const re = buildSafeRegExp("^https://example\\.com/blog", "test");
   assert.ok(re.test("HTTPS://EXAMPLE.COM/BLOG/POST-1"));
 
-  const alt: RegExp = buildSafeRegExp("shoes|boots", "test");
+  const alt = buildSafeRegExp("shoes|boots", "test");
   assert.ok(alt.test("running shoes"));
+
+  const group = buildSafeRegExp("(buy|cheap)+ shoes", "test");
+  assert.ok(group.test("buy cheap shoes"));
 });
 
 test("buildSafeRegExp rejects empty pattern, oversized pattern, and syntax error", () => {
@@ -63,22 +65,24 @@ test("buildSafeRegExp rejects empty pattern, oversized pattern, and syntax error
   });
 });
 
-test("buildSafeRegExp rejects catastrophic backtracking ReDoS patterns fast", () => {
+test("buildSafeRegExp rejects syntax that RE2 does not support", () => {
+  assert.throws(() => buildSafeRegExp("(a)\\1", "test"), { message: /Invalid test regex/ });
+  assert.throws(() => buildSafeRegExp("foo(?=bar)", "test"), { message: /Invalid test regex/ });
+});
+
+test("buildSafeRegExp matches in linear time for catastrophic patterns", () => {
+  const cases: Array<[string, string]> = [
+    ["^(a|a)*$", "a".repeat(5000) + "!"],
+    ["(a+)+$", "a".repeat(5000) + "!"],
+    [".*.*.*.*.*.*.*.*.*.*x", "a".repeat(5000)],
+    ["^" + "(a|a)?".repeat(22) + "$", "a".repeat(22) + "!"],
+  ];
   const start = performance.now();
-  assert.throws(() => buildSafeRegExp("^(a|a)*$", "test"), {
-    message: /catastrophic backtracking/,
-  });
-  assert.throws(() => buildSafeRegExp("(a+)+", "test"), {
-    message: /catastrophic backtracking/,
-  });
-  assert.throws(() => buildSafeRegExp("([a-z]+)*", "test"), {
-    message: /catastrophic backtracking/,
-  });
-  assert.throws(() => buildSafeRegExp("((a)+)+", "test"), {
-    message: /catastrophic backtracking/,
-  });
+  for (const [pattern, input] of cases) {
+    assert.equal(buildSafeRegExp(pattern, "test").test(input), false);
+  }
   const elapsed = performance.now() - start;
-  assert.ok(elapsed < 100, `ReDoS check took ${elapsed}ms; should be instant (<100ms)`);
+  assert.ok(elapsed < 500, `RE2 matching took ${elapsed}ms; expected linear time (<500ms)`);
 });
 
 test("parseBingDate parses WCF formats and ISO strings", () => {

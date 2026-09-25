@@ -52,6 +52,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "googleapis": "^181.0.0",
+    "re2js": "^2.8.6",
     "zod": "^3.25.0"
   },
   "devDependencies": {

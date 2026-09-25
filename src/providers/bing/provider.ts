@@ -1,3 +1,4 @@
+import type { RE2JS } from "re2js";
 import { SearchEngineProvider } from "../../core/provider.js";
 import {
   SiteInfo,
@@ -96,11 +97,11 @@ function applyTextFilter(
     throw new Error("Filter value is empty.");
   }
   if (filter.startsWith("!regex:")) {
-    const re: RegExp = buildSafeRegExp(filter.slice(7), "Bing filter");
+    const re: RE2JS = buildSafeRegExp(filter.slice(7), "Bing filter");
     return rows.filter((r: BingQueryRow) => !re.test(rowText(r, field)));
   }
   if (filter.startsWith("regex:")) {
-    const re: RegExp = buildSafeRegExp(filter.slice(6), "Bing filter");
+    const re: RE2JS = buildSafeRegExp(filter.slice(6), "Bing filter");
     return rows.filter((r: BingQueryRow) => re.test(rowText(r, field)));
   }
   if (filter.startsWith("exact:")) {
