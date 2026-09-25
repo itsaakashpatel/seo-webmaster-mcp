@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.itsaakashpatel/seo-webmaster",
-  "description": "Unified SEO & Webmaster MCP server for Google Search Console, Bing Webmaster Tools, and IndexNow",
+  "description": "Unified SEO & Webmaster MCP server for Google Search Console, Google Indexing API, Bing Webmaster Tools, and IndexNow",
   "repository": {
     "url": "https://github.com/itsaakashpatel/seo-webmaster-mcp",
     "source": "github"
@@ -43,6 +43,13 @@
           "isRequired": false,
           "format": "string",
           "isSecret": true
+        },
+        {
+          "name": "INDEXNOW_KEY_LOCATION",
+          "description": "Full URL to key file if hosted in custom location",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
         }
       ]
     }

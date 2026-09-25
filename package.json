@@ -8,9 +8,17 @@
     "seo-webmaster-mcp": "build/index.js"
   },
   "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "build": "tsc && chmod +x build/index.js",
     "dev": "tsc --watch",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt --write src tests",
+    "format:check": "oxfmt --check src tests",
+    "test": "npm run build && tsc -p tsconfig.test.json && node --test 'tests/**/*.test.ts'",
     "prepare": "npm run build"
   },
   "repository": {
@@ -44,10 +52,13 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "googleapis": "^181.0.0",
+    "re2js": "^2.8.6",
     "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "oxfmt": "^0.68.0",
+    "oxlint": "^1.83.0",
     "typescript": "^5.7.0"
   }
 }
