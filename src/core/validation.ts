@@ -46,14 +46,89 @@ export function validateDateRange(startDate: string, endDate: string): void {
   if (!DATE_RE.test(start) || !DATE_RE.test(end)) {
     throw new Error(`Invalid date format. Use YYYY-MM-DD (got "${startDate}" to "${endDate}").`);
   }
-  const startTime: number = Date.parse(start);
-  const endTime: number = Date.parse(end);
-  if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
-    throw new Error(`Invalid calendar date in range "${startDate}" to "${endDate}".`);
+  const startObj = new Date(start + "T00:00:00Z");
+  const endObj = new Date(end + "T00:00:00Z");
+  const startIso: string = !Number.isNaN(startObj.getTime())
+    ? startObj.toISOString().slice(0, 10)
+    : "";
+  const endIso: string = !Number.isNaN(endObj.getTime()) ? endObj.toISOString().slice(0, 10) : "";
+
+  if (startIso !== start) {
+    throw new Error(`Invalid calendar date "${startDate}".`);
   }
-  if (startTime > endTime) {
+  if (endIso !== end) {
+    throw new Error(`Invalid calendar date "${endDate}".`);
+  }
+  if (startObj.getTime() > endObj.getTime()) {
     throw new Error(`Invalid date range: startDate "${start}" is after endDate "${end}".`);
   }
+}
+
+export function parseBingDate(raw: unknown): string | undefined {
+  if (typeof raw !== "string" && typeof raw !== "number") {
+    return undefined;
+  }
+  if (typeof raw === "number") {
+    if (!Number.isFinite(raw)) {
+      return undefined;
+    }
+    try {
+      const d = new Date(raw);
+      return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+    } catch {
+      return undefined;
+    }
+  }
+  const trimmed: string = raw.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  const wcfMatch = /^\/?Date\(([+-]?\d+)(?:[+-]\d{4})?\)\/?$/i.exec(trimmed);
+  if (wcfMatch && wcfMatch[1]) {
+    const epochMs: number = Number(wcfMatch[1]);
+    if (!Number.isFinite(epochMs)) {
+      return undefined;
+    }
+    try {
+      const d = new Date(epochMs);
+      return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+    } catch {
+      return undefined;
+    }
+  }
+  const parsed: number = Date.parse(trimmed);
+  if (Number.isFinite(parsed)) {
+    try {
+      const d = new Date(parsed);
+      return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function hasCatastrophicPattern(pattern: string): boolean {
+  let normalized: string = pattern.replace(/\\./g, "_");
+  normalized = normalized.replace(/\[(?:[^\]\\]|\\.)*\]/g, "_");
+
+  if (/(?:[*+]|\{\d+,?\d*\})\s*(?:[*+]|\{\d+,?\d*\})/.test(normalized)) {
+    return true;
+  }
+
+  let simplified: string = normalized;
+  let prev = "";
+  while (simplified !== prev) {
+    prev = simplified;
+    if (/\(([^()]*[+*?]|[^()]*\{\d+,?\d*\})[^()]*\)\s*([*+]|\{\d+,?\d*\})/.test(simplified)) {
+      return true;
+    }
+    if (/\(([^()]*\|[^()]*)\)\s*([*+]|\{\d+,?\d*\})/.test(simplified)) {
+      return true;
+    }
+    simplified = simplified.replace(/\([^()]+\)/g, "X");
+  }
+  return false;
 }
 
 export function buildSafeRegExp(pattern: string, label: string): RegExp {
@@ -63,6 +138,11 @@ export function buildSafeRegExp(pattern: string, label: string): RegExp {
   }
   if (trimmed.length > MAX_REGEX_LEN) {
     throw new Error(`Invalid ${label} regex: pattern exceeds ${MAX_REGEX_LEN} chars.`);
+  }
+  if (hasCatastrophicPattern(trimmed)) {
+    throw new Error(
+      `Invalid ${label} regex "${trimmed}": pattern contains nested or repeated groups susceptible to catastrophic backtracking (ReDoS).`,
+    );
   }
   try {
     return new RegExp(trimmed, "i");

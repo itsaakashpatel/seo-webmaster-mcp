@@ -43,8 +43,14 @@ export function registerGetSitemapTool(server: McpServer): void {
         lines.push(`- **Status:** ${sm.status || "Unknown"}`);
         lines.push(`- **Last Submitted:** ${sm.lastSubmitted || "Never"}`);
         lines.push(`- **Last Downloaded:** ${sm.lastDownloaded || "Never"}`);
-        lines.push(`- **Errors:** ${sm.errors || 0}`);
-        lines.push(`- **Warnings:** ${sm.warnings || 0}`);
+        lines.push(`- **Errors:** ${sm.errors !== undefined ? sm.errors : "N/A"}`);
+        lines.push(`- **Warnings:** ${sm.warnings !== undefined ? sm.warnings : "N/A"}`);
+        if (sm.submittedUrls !== undefined) {
+          lines.push(`- **Submitted URLs:** ${sm.submittedUrls.toLocaleString()}`);
+        }
+        if (sm.indexedUrls !== undefined) {
+          lines.push(`- **Indexed URLs:** ${sm.indexedUrls.toLocaleString()}`);
+        }
 
         if (sm.contents && sm.contents.length > 0) {
           lines.push("\n#### Contents Breakdown:");

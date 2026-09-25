@@ -5,6 +5,7 @@ import {
   getIndexNowConfigurationGuide,
 } from "../providers/indexnow/provider.js";
 import { isIndexingConfigured, getIndexingGuide } from "../providers/google/indexing.js";
+import { detectGoogleCredentials } from "../providers/google/auth.js";
 
 export function registerEngineStatusTool(server: McpServer): void {
   server.tool(
@@ -12,6 +13,7 @@ export function registerEngineStatusTool(server: McpServer): void {
     "Check the configuration and connection status of all integrated search engine providers (Google Search Console, Google Indexing API, Bing Webmaster Tools, IndexNow).",
     {},
     async () => {
+      await detectGoogleCredentials();
       const providers = registry.getAll();
       const lines: string[] = [];
 

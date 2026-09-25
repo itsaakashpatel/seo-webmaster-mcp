@@ -8,8 +8,9 @@ import {
   isGoogleIndexingConfigured,
   getGoogleIndexingConfigurationGuide,
   formatGoogleError,
+  detectGoogleCredentials,
 } from "./auth.js";
-import { getErrorCode, getErrorMessage } from "../../core/errors.js";
+import { getErrorCode } from "../../core/errors.js";
 import { MAX_GOOGLE_INDEXING_URLS } from "../../core/validation.js";
 import { dedupeUrls, validateHttpsUrls } from "../../core/urls.js";
 
@@ -34,7 +35,7 @@ function toItemError(
     type,
     success: false,
     statusCode: code ?? 0,
-    message: formatGoogleError(err),
+    message: formatGoogleError(err, "indexing"),
   };
 }
 
@@ -63,7 +64,10 @@ export async function submitToGoogleIndexing(options: {
     );
   }
   if (!isGoogleIndexingConfigured()) {
-    throw new Error(getGoogleIndexingConfigurationGuide());
+    const detected: boolean = await detectGoogleCredentials();
+    if (!detected) {
+      throw new Error(getGoogleIndexingConfigurationGuide());
+    }
   }
 
   const client = getGoogleIndexingClient();
@@ -129,20 +133,4 @@ export async function submitToGoogleIndexing(options: {
     notificationType,
     items,
   };
-}
-
-export async function getGoogleNotificationStatus(url: string): Promise<string> {
-  const clean: string = url.trim();
-  if (clean.length === 0) {
-    throw new Error("url must be non-empty.");
-  }
-  try {
-    const client = getGoogleIndexingClient();
-    const res = await client.urlNotifications.getMetadata({ url: clean });
-    return JSON.stringify(res.data, null, 2);
-  } catch (err: unknown) {
-    throw new Error(`Failed to get notification status for "${clean}": ${getErrorMessage(err)}`, {
-      cause: err,
-    });
-  }
 }

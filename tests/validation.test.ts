@@ -9,11 +9,13 @@ import {
   clampStartRow,
   normalizeDimensions,
   parseDimensionList,
+  parseBingDate,
 } from "../build/core/validation.js";
 
 test("validateDateRange accepts valid chronological YYYY-MM-DD dates", () => {
   assert.doesNotThrow(() => validateDateRange("2026-01-01", "2026-01-31"));
   assert.doesNotThrow(() => validateDateRange("2026-06-15", "2026-06-15"));
+  assert.doesNotThrow(() => validateDateRange("2024-02-29", "2024-02-29")); // leap year
 });
 
 test("validateDateRange rejects invalid date format or out-of-order range", () => {
@@ -28,10 +30,25 @@ test("validateDateRange rejects invalid date format or out-of-order range", () =
   });
 });
 
+test("validateDateRange rejects non-existent calendar dates", () => {
+  assert.throws(() => validateDateRange("2026-02-31", "2026-03-05"), {
+    message: /Invalid calendar date "2026-02-31"/,
+  });
+  assert.throws(() => validateDateRange("2026-02-29", "2026-03-01"), {
+    message: /Invalid calendar date "2026-02-29"/,
+  });
+  assert.throws(() => validateDateRange("2026-04-31", "2026-05-01"), {
+    message: /Invalid calendar date "2026-04-31"/,
+  });
+});
+
 test("buildSafeRegExp compiles valid regex case-insensitively", () => {
   const re: RegExp = buildSafeRegExp("^https://example\\.com/blog", "test");
   assert.ok(re instanceof RegExp);
   assert.ok(re.test("HTTPS://EXAMPLE.COM/BLOG/POST-1"));
+
+  const alt: RegExp = buildSafeRegExp("shoes|boots", "test");
+  assert.ok(alt.test("running shoes"));
 });
 
 test("buildSafeRegExp rejects empty pattern, oversized pattern, and syntax error", () => {
@@ -44,6 +61,44 @@ test("buildSafeRegExp rejects empty pattern, oversized pattern, and syntax error
   assert.throws(() => buildSafeRegExp("[unclosed", "test"), {
     message: /Invalid test regex/,
   });
+});
+
+test("buildSafeRegExp rejects catastrophic backtracking ReDoS patterns fast", () => {
+  const start = performance.now();
+  assert.throws(() => buildSafeRegExp("^(a|a)*$", "test"), {
+    message: /catastrophic backtracking/,
+  });
+  assert.throws(() => buildSafeRegExp("(a+)+", "test"), {
+    message: /catastrophic backtracking/,
+  });
+  assert.throws(() => buildSafeRegExp("([a-z]+)*", "test"), {
+    message: /catastrophic backtracking/,
+  });
+  assert.throws(() => buildSafeRegExp("((a)+)+", "test"), {
+    message: /catastrophic backtracking/,
+  });
+  const elapsed = performance.now() - start;
+  assert.ok(elapsed < 100, `ReDoS check took ${elapsed}ms; should be instant (<100ms)`);
+});
+
+test("parseBingDate parses WCF formats and ISO strings", () => {
+  const wcf1 = parseBingDate("/Date(1690000000000-0700)/");
+  assert.ok(wcf1);
+  assert.equal(typeof wcf1, "string");
+  assert.ok(wcf1.startsWith("2023-07-22"));
+
+  const wcf2 = parseBingDate("/Date(1690000000000)/");
+  assert.ok(wcf2);
+  assert.equal(typeof wcf2, "string");
+  assert.ok(wcf2.startsWith("2023-07-22"));
+
+  const iso = parseBingDate("2026-03-01T00:00:00.000Z");
+  assert.equal(iso, "2026-03-01T00:00:00.000Z");
+
+  assert.equal(parseBingDate(""), undefined);
+  assert.equal(parseBingDate(null), undefined);
+  assert.equal(parseBingDate(undefined), undefined);
+  assert.equal(parseBingDate("not a date"), undefined);
 });
 
 test("normalizeHost handles raw domains, prefixes, and ports", () => {

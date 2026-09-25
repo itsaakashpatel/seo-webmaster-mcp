@@ -61,6 +61,7 @@ export interface UrlInspectionResult {
   coverageState?: string;
   indexingState?: string;
   lastCrawlTime?: string;
+  siteLastCrawlTime?: string;
   crawledAs?: string;
   robotsTxtState?: string;
   pageFetchState?: string;

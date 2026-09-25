@@ -70,6 +70,11 @@ export function registerInspectUrlTool(server: McpServer): void {
         if (res.pageFetchState) lines.push(`- **Page Fetch:** ${res.pageFetchState}`);
         if (res.robotsTxtState) lines.push(`- **Robots.txt:** ${res.robotsTxtState}`);
         if (res.lastCrawlTime) lines.push(`- **Last Crawled:** ${res.lastCrawlTime}`);
+        if (res.siteLastCrawlTime) {
+          lines.push(
+            `- **Site Last Crawled:** ${res.siteLastCrawlTime} (site-level crawl context)`,
+          );
+        }
         if (res.crawledAs) lines.push(`- **Crawled As:** ${res.crawledAs}`);
         if (res.userCanonical) lines.push(`- **User Canonical:** \`${res.userCanonical}\``);
         if (res.googleCanonical) lines.push(`- **Google Canonical:** \`${res.googleCanonical}\``);

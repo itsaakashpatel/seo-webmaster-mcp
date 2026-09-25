@@ -45,7 +45,7 @@ export function registerListSitemapsTool(server: McpServer): void {
           const lastSub = sm.lastSubmitted ? sm.lastSubmitted.split("T")[0] : "never";
           const lastDown = sm.lastDownloaded ? sm.lastDownloaded.split("T")[0] : "never";
           const type = sm.type || "Sitemap";
-          const errors = sm.errors || 0;
+          const errors = sm.errors !== undefined ? sm.errors : "-";
           const status = sm.status || "Unknown";
 
           return `| ${path} | ${lastSub} | ${lastDown} | ${type} | ${errors} | ${status} |`;
@@ -55,15 +55,21 @@ export function registerListSitemapsTool(server: McpServer): void {
         lines.push(tableSeparator);
         lines.push(...tableRows);
 
-        const withContents = sitemaps.filter((sm) => sm.contents && sm.contents.length > 0);
-        if (withContents.length > 0) {
+        const withBreakdown = sitemaps.filter(
+          (sm) => (sm.contents && sm.contents.length > 0) || sm.submittedUrls !== undefined,
+        );
+        if (withBreakdown.length > 0) {
           lines.push("\n#### Indexed vs Submitted URLs:");
-          for (const sm of withContents) {
+          for (const sm of withBreakdown) {
             lines.push(`\n**\`${sm.path}\`**:`);
-            for (const c of sm.contents || []) {
-              lines.push(
-                `- **${c.type}**: ${c.indexed.toLocaleString()} indexed / ${c.submitted.toLocaleString()} submitted`,
-              );
+            if (sm.contents && sm.contents.length > 0) {
+              for (const c of sm.contents) {
+                lines.push(
+                  `- **${c.type}**: ${c.indexed.toLocaleString()} indexed / ${c.submitted.toLocaleString()} submitted`,
+                );
+              }
+            } else if (sm.submittedUrls !== undefined) {
+              lines.push(`- **Submitted URLs**: ${sm.submittedUrls.toLocaleString()}`);
             }
           }
         }

@@ -21,7 +21,23 @@ function createGoogleAuth(
   });
 }
 
+let detectedCredentials: boolean | null = null;
+
+function getAdcFilePath(): string | undefined {
+  if (process.env.APPDATA) {
+    return `${process.env.APPDATA}/gcloud/application_default_credentials.json`;
+  }
+  const home: string | undefined = process.env.HOME;
+  if (home) {
+    return `${home}/.config/gcloud/application_default_credentials.json`;
+  }
+  return undefined;
+}
+
 export function isGoogleConfigured(): boolean {
+  if (detectedCredentials !== null) {
+    return detectedCredentials;
+  }
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
     return true;
   }
@@ -31,7 +47,34 @@ export function isGoogleConfigured(): boolean {
   ) {
     return true;
   }
+  const adcPath: string | undefined = getAdcFilePath();
+  if (adcPath && existsSync(adcPath)) {
+    return true;
+  }
   return false;
+}
+
+export async function detectGoogleCredentials(): Promise<boolean> {
+  if (detectedCredentials !== null) {
+    return detectedCredentials;
+  }
+  if (isGoogleConfigured()) {
+    detectedCredentials = true;
+    return true;
+  }
+  try {
+    const auth = new google.auth.GoogleAuth({ scopes: SCOPES });
+    const clientPromise = auth.getClient();
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Timeout detecting ADC credentials")), 2000);
+    });
+    await Promise.race([clientPromise, timeoutPromise]);
+    detectedCredentials = true;
+    return true;
+  } catch {
+    detectedCredentials = false;
+    return false;
+  }
 }
 
 export function getGoogleConfigurationGuide(): string {
@@ -105,11 +148,16 @@ export function getGoogleSearchConsoleClient(): searchconsole_v1.Searchconsole {
   return cachedClient;
 }
 
-export function formatGoogleError(error: unknown): string {
+export function formatGoogleError(
+  error: unknown,
+  context: "searchconsole" | "indexing" = "searchconsole",
+): string {
   const code: number | undefined = getErrorCode(error);
   const msg: string = getErrorMessage(error);
   if (msg.includes("Could not load the default credentials")) {
-    return getGoogleConfigurationGuide();
+    return context === "indexing"
+      ? getGoogleIndexingConfigurationGuide()
+      : getGoogleConfigurationGuide();
   }
   if (
     code === 403 ||
@@ -128,7 +176,10 @@ export function formatGoogleError(error: unknown): string {
     return `Bad request (400): ${msg}`;
   }
   if (code === 429) {
-    return `Quota exceeded (429): ${msg}\n\nThe Google Indexing API defaults to 200 publish requests per day. Reduce batch size or retry tomorrow.`;
+    if (context === "indexing") {
+      return `Quota exceeded (429): ${msg}\n\nThe Google Indexing API defaults to 200 publish requests per day. Reduce batch size or retry tomorrow.`;
+    }
+    return `Quota exceeded (429): ${msg}\n\nSearch Console query or inspection quota exceeded. Please reduce request frequency or retry later.`;
   }
   return msg;
 }
