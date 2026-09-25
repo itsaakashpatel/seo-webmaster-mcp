@@ -172,8 +172,8 @@ No parameters required.
 | `rowLimit` | number | No | Max rows to return (default: `100`, max: `25000`) |
 | `searchType` | string | No | Vertical: `web`, `image`, `video`, `news`, `discover`, `googleNews` (default: `web`) |
 | `dataState` | string | No | `all` (includes fresh data) or `final` (default: `all`) |
-| `queryFilter` | string | No | Filter queries: `substring`, `exact:keyword`, `regex:pattern`, or `!regex:pattern` |
-| `pageFilter` | string | No | Filter page URLs: `substring`, `exact:url`, `regex:pattern`, or `!regex:pattern` |
+| `queryFilter` | string | No | Filter queries: `text` (contains), `!text`, `exact:keyword`, `!exact:keyword`, `regex:pattern`, or `!regex:pattern` ([RE2 syntax](https://github.com/google/re2/wiki/Syntax)) |
+| `pageFilter` | string | No | Filter page URLs: same syntax as `queryFilter` |
 | `countryFilter` | string | No | ISO 3166-1 alpha-3 code (e.g. `USA`, `GBR`, `DEU`, `IND`) |
 | `deviceFilter` | string | No | `DESKTOP`, `MOBILE`, or `TABLET` |
 | `startRow` | number | No | Pagination row offset (default: `0`) |
