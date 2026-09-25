@@ -113,6 +113,7 @@ export function registerInspectUrlTool(server: McpServer): void {
         inspectionUrl: z
           .string()
           .trim()
+          .min(1)
           .refine(isHttpUrl, "inspectionUrl must be a full http(s) URL")
           .describe("The fully qualified URL to inspect (must belong to the site property)"),
         engine: engineSchema,

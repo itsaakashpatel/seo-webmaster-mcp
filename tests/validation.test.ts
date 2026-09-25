@@ -106,6 +106,8 @@ test("parseBingDate parses WCF formats and ISO strings", () => {
   // Finite but outside the Date range: must not throw RangeError.
   assert.equal(parseBingDate("/Date(99999999999999999)/"), undefined);
   assert.equal(parseBingDate(1e17), undefined);
+  // A padded ISO date must still parse as UTC, not local time.
+  assert.equal(parseBingDate(" 2024-01-01 "), "2024-01-01T00:00:00.000Z");
 });
 
 test("normalizeHost handles raw domains, prefixes, and ports", () => {

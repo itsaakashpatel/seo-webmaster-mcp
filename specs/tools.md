@@ -337,7 +337,7 @@ Submit (not read-only, not destructive, idempotent; `readOnlyHint: false`, `dest
 Notify Google about updated or deleted URLs via the Google Indexing API for eligible JobPosting or BroadcastEvent pages.
 
 ### Annotations
-Submit (not read-only, not destructive, idempotent; `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: true`, `openWorldHint: true`).
+Submit with quota (not read-only, not destructive, not idempotent because each call uses daily quota; `readOnlyHint: false`, `destructiveHint: false`, `idempotentHint: false`, `openWorldHint: true`).
 
 ### Inputs
 | Name | Type | Required | Default | Rules |

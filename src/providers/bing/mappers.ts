@@ -18,11 +18,12 @@ export function parseBingDate(raw: unknown): string | undefined {
   if (typeof raw === "number") {
     return toIsoString(raw);
   }
-  if (typeof raw !== "string" || raw.trim().length === 0) {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (text.length === 0) {
     return undefined;
   }
-  const wcf = WCF_DATE_RE.exec(raw.trim());
-  return toIsoString(wcf?.[1] ? Number(wcf[1]) : Date.parse(raw));
+  const wcf = WCF_DATE_RE.exec(text);
+  return toIsoString(wcf?.[1] ? Number(wcf[1]) : Date.parse(text));
 }
 
 export function toSiteInfo(site: BingRecord): SiteInfo {
@@ -85,7 +86,7 @@ function toAggregateRow(key: string, group: readonly BingRecord[]): AnalyticsRow
 }
 
 export function rowKey(row: BingRecord): string {
-  return asString(row.Query, "unknown");
+  return typeof row.Query === "number" ? String(row.Query) : asString(row.Query, "unknown");
 }
 
 /** Bing returns one row per key per week. Merge them into one row per key, top clicks first. */

@@ -5,7 +5,7 @@ import { errText, okText } from "../core/responses.js";
 import { GOOGLE_INDEXING_TYPES, type GoogleIndexingSubmissionResult } from "../core/types.js";
 import { parseUrlList } from "../core/urls.js";
 import { submitToGoogleIndexing } from "../providers/google/indexing.js";
-import { SUBMIT, withErrorBoundary } from "./shared.js";
+import { SUBMIT_WITH_QUOTA, withErrorBoundary } from "./shared.js";
 
 const MAX_LISTED_ITEMS = 20;
 
@@ -52,7 +52,7 @@ export function registerSubmitGoogleUrlsTool(server: McpServer): void {
             'Notification type: "URL_UPDATED" for new/changed pages, "URL_DELETED" for removed pages',
           ),
       },
-      annotations: SUBMIT,
+      annotations: SUBMIT_WITH_QUOTA,
     },
     withErrorBoundary("Google indexing error", async ({ urls, type }) => {
       const res = await submitToGoogleIndexing({ urls: parseUrlList(urls), type });

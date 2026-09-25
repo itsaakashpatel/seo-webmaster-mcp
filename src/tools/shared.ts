@@ -33,6 +33,9 @@ export const SUBMIT: ToolAnnotations = {
   openWorldHint: true,
 };
 
+/** Like `SUBMIT`, but each call uses daily quota, so clients must not retry it freely. */
+export const SUBMIT_WITH_QUOTA: ToolAnnotations = { ...SUBMIT, idempotentHint: false };
+
 /**
  * Wraps a tool handler so that any thrown error becomes an MCP `isError` result that starts with
  * `errorPrefix`. Handlers can then throw freely and never need their own `try`/`catch`.
