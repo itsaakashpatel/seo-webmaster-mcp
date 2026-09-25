@@ -1,48 +1,24 @@
-import {
-  QueryEngineType,
-  SiteInfo,
-  SearchAnalyticsQuery,
+import type {
   AnalyticsResult,
-  UrlInspectionResult,
+  QueryEngineType,
+  SearchAnalyticsQuery,
+  SiteInfo,
   SitemapInfo,
+  UrlInspectionResult,
 } from "./types.js";
 
+/** The adapter contract that every query engine (Google, Bing) implements. */
 export interface SearchEngineProvider {
   readonly engine: QueryEngineType;
   readonly displayName: string;
+  /** A short label for the credentials this engine needs, shown by `engine_status`. */
+  readonly authMethod: string;
 
-  /**
-   * Check if credentials / API keys are configured for this provider.
-   */
   isConfigured(): boolean;
-
-  /**
-   * Returns step-by-step setup guidance if this provider is not configured.
-   */
   getConfigurationGuide(): string;
-
-  /**
-   * List verified sites/properties on this search engine.
-   */
   listSites(): Promise<SiteInfo[]>;
-
-  /**
-   * Query search performance / analytics data.
-   */
   queryAnalytics(query: SearchAnalyticsQuery): Promise<AnalyticsResult>;
-
-  /**
-   * Inspect live indexing & crawl status of a URL (if supported by provider).
-   */
-  inspectUrl?(siteUrl: string, url: string, language?: string): Promise<UrlInspectionResult>;
-
-  /**
-   * List submitted sitemaps and their indexing status.
-   */
-  listSitemaps?(siteUrl: string): Promise<SitemapInfo[]>;
-
-  /**
-   * Get deep metrics for a specific sitemap feed.
-   */
-  getSitemap?(siteUrl: string, feedpath: string): Promise<SitemapInfo>;
+  inspectUrl(siteUrl: string, url: string, languageCode?: string): Promise<UrlInspectionResult>;
+  listSitemaps(siteUrl: string): Promise<SitemapInfo[]>;
+  getSitemap(siteUrl: string, feedpath: string): Promise<SitemapInfo>;
 }

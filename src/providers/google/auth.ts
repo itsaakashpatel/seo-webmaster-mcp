@@ -1,228 +1,207 @@
-import { google, searchconsole_v1, indexing_v3 } from "googleapis";
-import { readFileSync, existsSync } from "node:fs";
-import { basename } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, join } from "node:path";
+import { google, type Auth, type indexing_v3, type searchconsole_v1 } from "googleapis";
 import { getErrorCode, getErrorMessage } from "../../core/errors.js";
+import { isRecord } from "../../core/guards.js";
 
-let cachedClient: searchconsole_v1.Searchconsole | null = null;
-let cachedIndexingClient: indexing_v3.Indexing | null = null;
-
-const SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
+const SEARCH_CONSOLE_SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"];
 const INDEXING_SCOPES = ["https://www.googleapis.com/auth/indexing"];
-
-function createGoogleAuth(
-  credentials: unknown,
-  scopes: string[],
-): InstanceType<typeof google.auth.GoogleAuth> {
-  // googleapis types service-account JSON as JWT input; our JSON.parse result is
-  // validated at runtime by GoogleAuth itself, so this single interop cast is intentional.
-  return new google.auth.GoogleAuth({
-    credentials: credentials as never,
-    scopes,
-  });
-}
-
-// Only a positive result is cached, so a slow or failed probe is retried on the next call.
-let detectedCredentials = false;
 const ADC_PROBE_TIMEOUT_MS = 2000;
 
+export type GoogleApi = "searchconsole" | "indexing";
+
+export const GOOGLE_SETUP_GUIDE = [
+  "Google Search Console is not configured.",
+  "",
+  "To configure:",
+  "1. In Google Cloud Console, create a Service Account and download a JSON key.",
+  "2. Enable the Google Search Console API for your Google Cloud project.",
+  "3. Set `GOOGLE_APPLICATION_CREDENTIALS` to the JSON key file path (or `GOOGLE_SERVICE_ACCOUNT_KEY` to the raw JSON string).",
+  "4. Add the service account email as a user with 'Restricted' or 'Full' permissions in Google Search Console.",
+].join("\n");
+
+export const GOOGLE_INDEXING_SETUP_GUIDE = [
+  "Google Indexing API is not configured or not enabled.",
+  "",
+  "To configure:",
+  "1. Use the same service account as Search Console (`GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_SERVICE_ACCOUNT_KEY`).",
+  "2. Enable the Indexing API in Google Cloud Console: APIs & Services → Library → Indexing API → Enable.",
+  "3. Add the service account email as an 'Owner' of each property in Search Console.",
+  "4. Note limits: only JobPosting or BroadcastEvent (in VideoObject) pages are eligible, and the default quota is 200 publish requests per day.",
+  "5. Request extra quota in Cloud Console if needed.",
+].join("\n");
+
+interface ApiErrorTips {
+  readonly guide: string;
+  readonly forbidden: string;
+  readonly quota: string;
+}
+
+const ERROR_TIPS: Readonly<Record<GoogleApi, ApiErrorTips>> = {
+  searchconsole: {
+    guide: GOOGLE_SETUP_GUIDE,
+    forbidden:
+      "Make sure the service account email is added as a user with 'Restricted' or 'Full' permission in Google Search Console for this property.",
+    quota:
+      "Search Console query or inspection quota exceeded. Please reduce request frequency or retry later.",
+  },
+  indexing: {
+    guide: GOOGLE_INDEXING_SETUP_GUIDE,
+    forbidden:
+      "The Indexing API requires the service account email to be added as an 'Owner' of this property in Google Search Console.",
+    quota:
+      "The Google Indexing API defaults to 200 publish requests per day. Reduce batch size or retry tomorrow.",
+  },
+};
+
+const STATUS_LABELS: Readonly<Partial<Record<number, string>>> = {
+  400: "Bad request",
+  404: "Not found",
+  429: "Quota exceeded",
+};
+
+const PERMISSION_MARKERS = ["User does not have sufficient permission", "PERMISSION_DENIED"];
+
+// Only a positive result is cached, so a slow or failed probe is retried on the next call.
+let adcDetected = false;
+
 function getAdcFilePath(): string | undefined {
-  if (process.env.CLOUDSDK_CONFIG) {
-    return `${process.env.CLOUDSDK_CONFIG}/application_default_credentials.json`;
-  }
-  if (process.env.APPDATA) {
-    return `${process.env.APPDATA}/gcloud/application_default_credentials.json`;
-  }
-  const home: string | undefined = process.env.HOME;
-  if (home) {
-    return `${home}/.config/gcloud/application_default_credentials.json`;
-  }
-  return undefined;
+  const { CLOUDSDK_CONFIG, APPDATA, HOME } = process.env;
+  const configDir =
+    CLOUDSDK_CONFIG ??
+    (APPDATA ? join(APPDATA, "gcloud") : undefined) ??
+    (HOME ? join(HOME, ".config", "gcloud") : undefined);
+  return configDir ? join(configDir, "application_default_credentials.json") : undefined;
+}
+
+function getRawServiceAccountKey(): string | undefined {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  return raw?.trim() || undefined;
+}
+
+function getCredentialsPath(): string | undefined {
+  return process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim() || undefined;
 }
 
 export function isGoogleConfigured(): boolean {
-  if (detectedCredentials) {
-    return true;
-  }
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-    return true;
-  }
-  if (
-    process.env.GOOGLE_APPLICATION_CREDENTIALS &&
-    existsSync(process.env.GOOGLE_APPLICATION_CREDENTIALS.trim())
-  ) {
-    return true;
-  }
-  const adcPath: string | undefined = getAdcFilePath();
-  if (adcPath && existsSync(adcPath)) {
-    return true;
-  }
-  return false;
+  const credentialsPath = getCredentialsPath();
+  const adcPath = getAdcFilePath();
+  return (
+    adcDetected ||
+    getRawServiceAccountKey() !== undefined ||
+    (credentialsPath !== undefined && existsSync(credentialsPath)) ||
+    (adcPath !== undefined && existsSync(adcPath))
+  );
 }
 
+/** Probes Application Default Credentials (for example GCE metadata) with a short timeout. */
 export async function detectGoogleCredentials(): Promise<boolean> {
   if (isGoogleConfigured()) {
-    detectedCredentials = true;
     return true;
   }
   let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("ADC probe timed out")), ADC_PROBE_TIMEOUT_MS);
+  });
   try {
-    const auth = new google.auth.GoogleAuth({ scopes: SCOPES });
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error("Timeout detecting ADC credentials")),
-        ADC_PROBE_TIMEOUT_MS,
-      );
-    });
-    await Promise.race([auth.getClient(), timeout]);
-    detectedCredentials = true;
-    return true;
+    await Promise.race([new google.auth.GoogleAuth().getClient(), timeout]);
+    adcDetected = true;
   } catch {
-    // No usable ADC. Do not cache the failure, so a later call can probe again.
-    return false;
+    // No usable ADC. The failure is not cached, so a later call can probe again.
   } finally {
     clearTimeout(timer);
   }
+  return adcDetected;
 }
 
-export function getGoogleConfigurationGuide(): string {
-  return (
-    "Google Search Console is not configured.\n\n" +
-    "To configure:\n" +
-    "1. In Google Cloud Console, create a Service Account and download a JSON key.\n" +
-    "2. Enable the Google Search Console API for your Google Cloud project.\n" +
-    "3. Set `GOOGLE_APPLICATION_CREDENTIALS` to the JSON key file path (or `GOOGLE_SERVICE_ACCOUNT_KEY` to the raw JSON string).\n" +
-    "4. Add the service account email as a user with 'Restricted' or 'Full' permissions in Google Search Console."
-  );
+/** Accepts raw JSON or base64-encoded JSON. */
+function decodeServiceAccountKey(raw: string): string {
+  if (raw.startsWith("{")) {
+    return raw;
+  }
+  const decoded = Buffer.from(raw, "base64").toString("utf-8").trim();
+  return decoded.startsWith("{") ? decoded : raw;
 }
 
-function buildCredentials(): unknown {
-  const rawKey: string | undefined =
-    process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
-  if (rawKey && rawKey.trim().length > 0) {
-    let jsonString: string = rawKey.trim();
-    if (!jsonString.startsWith("{")) {
-      try {
-        const decoded: string = Buffer.from(jsonString, "base64").toString("utf-8");
-        if (decoded.trim().startsWith("{")) {
-          jsonString = decoded.trim();
-        }
-      } catch {
-        // keep original; JSON.parse below reports the problem
-      }
-    }
-    try {
-      return JSON.parse(jsonString);
-    } catch (err: unknown) {
-      throw new Error(`Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY: ${getErrorMessage(err)}.`, {
-        cause: err,
-      });
-    }
+function parseCredentials(json: string, source: string): Auth.JWTInput {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch (err: unknown) {
+    throw new Error(`Failed to parse ${source}: ${getErrorMessage(err)}.`, { cause: err });
   }
-  const credentialsPath: string | undefined = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (credentialsPath && credentialsPath.trim().length > 0) {
-    const trimmedPath: string = credentialsPath.trim();
-    if (!existsSync(trimmedPath)) {
-      throw new Error(`Credentials file not found at: "${basename(trimmedPath)}".`);
-    }
-    try {
-      return JSON.parse(readFileSync(trimmedPath, "utf-8"));
-    } catch (err: unknown) {
-      throw new Error(
-        `Failed to load service account credentials from "${basename(trimmedPath)}": ${getErrorMessage(err)}`,
-        { cause: err },
-      );
-    }
+  if (!isRecord(parsed)) {
+    throw new Error(`Failed to parse ${source}: expected a JSON object.`);
   }
-  return undefined;
+  // Interop cast: GoogleAuth validates the service-account fields itself when it signs a token.
+  return parsed as Auth.JWTInput;
 }
 
-export function getGoogleSearchConsoleClient(): searchconsole_v1.Searchconsole {
-  if (cachedClient) {
-    return cachedClient;
+function readCredentialsFile(path: string): string {
+  const name = basename(path);
+  if (!existsSync(path)) {
+    throw new Error(`Credentials file not found at: "${name}".`);
   }
-  const credentials: unknown = buildCredentials();
-  if (credentials === undefined) {
-    try {
-      const auth = new google.auth.GoogleAuth({ scopes: SCOPES });
-      cachedClient = google.searchconsole({ version: "v1", auth });
-      return cachedClient;
-    } catch {
-      throw new Error(getGoogleConfigurationGuide());
-    }
-  }
-  const auth = createGoogleAuth(credentials, SCOPES);
-  cachedClient = google.searchconsole({ version: "v1", auth });
-  return cachedClient;
+  return readFileSync(path, "utf-8");
 }
 
-export function formatGoogleError(
-  error: unknown,
-  context: "searchconsole" | "indexing" = "searchconsole",
-): string {
-  const code: number | undefined = getErrorCode(error);
-  const msg: string = getErrorMessage(error);
+/** Loads explicit service-account credentials. Returns `undefined` to fall back to ADC. */
+function loadCredentials(): Auth.JWTInput | undefined {
+  const rawKey = getRawServiceAccountKey();
+  if (rawKey) {
+    return parseCredentials(decodeServiceAccountKey(rawKey), "GOOGLE_SERVICE_ACCOUNT_KEY");
+  }
+  const path = getCredentialsPath();
+  return path ? parseCredentials(readCredentialsFile(path), `"${basename(path)}"`) : undefined;
+}
+
+function createAuth(scopes: string[]): Auth.GoogleAuth {
+  return new google.auth.GoogleAuth({ credentials: loadCredentials(), scopes });
+}
+
+function lazy<T>(factory: () => T): () => T {
+  let value: T | undefined;
+  return () => {
+    value ??= factory();
+    return value;
+  };
+}
+
+export const getSearchConsoleClient: () => searchconsole_v1.Searchconsole = lazy(() =>
+  google.searchconsole({ version: "v1", auth: createAuth(SEARCH_CONSOLE_SCOPES) }),
+);
+
+export const getIndexingClient: () => indexing_v3.Indexing = lazy(() =>
+  google.indexing({ version: "v3", auth: createAuth(INDEXING_SCOPES) }),
+);
+
+/** Turns a Google API error into a message with the status and a fix for the given API. */
+export function formatGoogleError(error: unknown, api: GoogleApi = "searchconsole"): string {
+  const code = getErrorCode(error);
+  const msg = getErrorMessage(error);
+  const tips = ERROR_TIPS[api];
   if (msg.includes("Could not load the default credentials")) {
-    return context === "indexing"
-      ? getGoogleIndexingConfigurationGuide()
-      : getGoogleConfigurationGuide();
+    return tips.guide;
   }
-  if (
-    code === 403 ||
-    msg.includes("User does not have sufficient permission") ||
-    msg.includes("PERMISSION_DENIED")
-  ) {
-    const tip: string =
-      context === "indexing"
-        ? "The Indexing API requires the service account email to be added as an 'Owner' of this property in Google Search Console."
-        : "Make sure the service account email is added as a user with 'Restricted' or 'Full' permission in Google Search Console for this property.";
-    return `Permission error (403): ${msg}\n\n${tip}`;
+  if (code === 403 || PERMISSION_MARKERS.some((marker) => msg.includes(marker))) {
+    return `Permission error (403): ${msg}\n\n${tips.forbidden}`;
   }
-  if (code === 404) {
-    return `Not found (404): ${msg}`;
+  const label = code === undefined ? undefined : STATUS_LABELS[code];
+  if (!label) {
+    return msg;
   }
-  if (code === 400) {
-    return `Bad request (400): ${msg}`;
-  }
-  if (code === 429) {
-    if (context === "indexing") {
-      return `Quota exceeded (429): ${msg}\n\nThe Google Indexing API defaults to 200 publish requests per day. Reduce batch size or retry tomorrow.`;
-    }
-    return `Quota exceeded (429): ${msg}\n\nSearch Console query or inspection quota exceeded. Please reduce request frequency or retry later.`;
-  }
-  return msg;
+  const tip = code === 429 ? `\n\n${tips.quota}` : "";
+  return `${label} (${code}): ${msg}${tip}`;
 }
 
-export function isGoogleIndexingConfigured(): boolean {
-  return isGoogleConfigured();
-}
-
-export function getGoogleIndexingConfigurationGuide(): string {
-  return (
-    "Google Indexing API is not configured or not enabled.\n\n" +
-    "To configure:\n" +
-    "1. Use the same service account as Search Console (`GOOGLE_APPLICATION_CREDENTIALS` or `GOOGLE_SERVICE_ACCOUNT_KEY`).\n" +
-    "2. Enable the Indexing API in Google Cloud Console: APIs & Services → Library → Indexing API → Enable.\n" +
-    "3. Verify ownership of each URL's domain in Search Console with the same service-account owner.\n" +
-    "4. Note limits: only JobPosting or BroadcastEvent (in VideoObject) pages are eligible, and the default quota is 200 publish requests per day.\n" +
-    "5. Request extra quota in Cloud Console if needed."
-  );
-}
-
-export function getGoogleIndexingClient(): indexing_v3.Indexing {
-  if (cachedIndexingClient) {
-    return cachedIndexingClient;
+/** Runs a Google API call and rethrows any failure with a formatted message. */
+export async function withGoogleErrors<T>(
+  action: () => Promise<T>,
+  api: GoogleApi = "searchconsole",
+): Promise<T> {
+  try {
+    return await action();
+  } catch (err: unknown) {
+    throw new Error(formatGoogleError(err, api), { cause: err });
   }
-  const credentials: unknown = buildCredentials();
-  if (credentials === undefined) {
-    try {
-      const auth = new google.auth.GoogleAuth({ scopes: INDEXING_SCOPES });
-      cachedIndexingClient = google.indexing({ version: "v3", auth });
-      return cachedIndexingClient;
-    } catch {
-      throw new Error(getGoogleIndexingConfigurationGuide());
-    }
-  }
-  const auth = createGoogleAuth(credentials, INDEXING_SCOPES);
-  cachedIndexingClient = google.indexing({ version: "v3", auth });
-  return cachedIndexingClient;
 }

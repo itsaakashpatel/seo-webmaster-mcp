@@ -1,70 +1,58 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { registry } from "../core/registry.js";
-import { getErrorMessage } from "../core/errors.js";
-import { okText, errText } from "../core/responses.js";
+import { code, fieldList, formatCount } from "../core/markdown.js";
+import { okText } from "../core/responses.js";
+import type { SitemapInfo } from "../core/types.js";
+import { providers } from "../providers/index.js";
+import { renderSitemapCounts } from "./list-sitemaps.js";
+import { READ_ONLY, engineSchema, siteUrlSchema, withErrorBoundary } from "./shared.js";
+
+function optionalCount(value: number | undefined): string | undefined {
+  return value === undefined ? undefined : formatCount(value);
+}
+
+export function renderSitemap(siteUrl: string, providerName: string, sitemap: SitemapInfo): string {
+  const counts = renderSitemapCounts(sitemap);
+  return [
+    `### Sitemap Details: ${code(sitemap.path)}`,
+    ...fieldList([
+      ["Provider", providerName],
+      ["Site", code(siteUrl)],
+      ["Type", sitemap.type ?? "Sitemap"],
+      ["Status", sitemap.status ?? "Unknown"],
+      ["Last Submitted", sitemap.lastSubmitted ?? "Never"],
+      ["Last Downloaded", sitemap.lastDownloaded ?? "Never"],
+      ["Errors", sitemap.errors ?? "N/A"],
+      ["Warnings", sitemap.warnings ?? "N/A"],
+      ["Indexed URLs", optionalCount(sitemap.indexedUrls)],
+    ]),
+    ...(counts.length > 0 ? ["\n#### Contents Breakdown:", ...counts] : []),
+  ].join("\n");
+}
 
 export function registerGetSitemapTool(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "get_sitemap",
-    "Retrieve deep indexing and error metrics for a specific sitemap feed.",
     {
-      siteUrl: z.string().min(1).describe("Site URL as verified in Search Console"),
-      feedpath: z
-        .string()
-        .min(1)
-        .describe(
-          "Full URL or relative path to the sitemap (e.g. https://example.com/sitemap.xml)",
-        ),
-      engine: z
-        .enum(["google", "bing"])
-        .optional()
-        .default("google")
-        .describe("Search engine provider: 'google' or 'bing' (default: 'google')"),
+      title: "Get Sitemap",
+      description: "Retrieve deep indexing and error metrics for a specific sitemap feed.",
+      inputSchema: {
+        siteUrl: siteUrlSchema,
+        feedpath: z
+          .string()
+          .trim()
+          .min(1)
+          .describe(
+            "Full URL or relative path to the sitemap (e.g. https://example.com/sitemap.xml)",
+          ),
+        engine: engineSchema,
+      },
+      annotations: READ_ONLY,
     },
-    async ({ siteUrl, feedpath, engine }) => {
-      try {
-        const provider = registry.get(engine);
-        if (!provider) {
-          throw new Error(`Provider "${engine}" is not registered.`);
-        }
-
-        if (!provider.getSitemap) {
-          throw new Error(`Getting sitemap details is not supported by ${provider.displayName}.`);
-        }
-
-        const sm = await provider.getSitemap(siteUrl.trim(), feedpath.trim());
-        const lines: string[] = [];
-
-        lines.push(`### Sitemap Details: \`${sm.path}\``);
-        lines.push(`- **Provider:** ${provider.displayName}`);
-        lines.push(`- **Site:** \`${siteUrl}\``);
-        lines.push(`- **Type:** ${sm.type || "Sitemap"}`);
-        lines.push(`- **Status:** ${sm.status || "Unknown"}`);
-        lines.push(`- **Last Submitted:** ${sm.lastSubmitted || "Never"}`);
-        lines.push(`- **Last Downloaded:** ${sm.lastDownloaded || "Never"}`);
-        lines.push(`- **Errors:** ${sm.errors !== undefined ? sm.errors : "N/A"}`);
-        lines.push(`- **Warnings:** ${sm.warnings !== undefined ? sm.warnings : "N/A"}`);
-        if (sm.submittedUrls !== undefined) {
-          lines.push(`- **Submitted URLs:** ${sm.submittedUrls.toLocaleString()}`);
-        }
-        if (sm.indexedUrls !== undefined) {
-          lines.push(`- **Indexed URLs:** ${sm.indexedUrls.toLocaleString()}`);
-        }
-
-        if (sm.contents && sm.contents.length > 0) {
-          lines.push("\n#### Contents Breakdown:");
-          for (const c of sm.contents) {
-            lines.push(
-              `- **${c.type}**: ${c.indexed.toLocaleString()} indexed / ${c.submitted.toLocaleString()} submitted`,
-            );
-          }
-        }
-
-        return okText(lines.join("\n"));
-      } catch (error: unknown) {
-        return errText(`Error getting sitemap details: ${getErrorMessage(error)}`);
-      }
-    },
+    withErrorBoundary("Error getting sitemap details", async ({ siteUrl, feedpath, engine }) => {
+      const provider = providers[engine];
+      const sitemap = await provider.getSitemap(siteUrl, feedpath);
+      return okText(renderSitemap(siteUrl, provider.displayName, sitemap));
+    }),
   );
 }

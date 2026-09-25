@@ -9,8 +9,8 @@ import {
   clampStartRow,
   normalizeDimensions,
   parseDimensionList,
-  parseBingDate,
 } from "../build/core/validation.js";
+import { parseBingDate } from "../build/providers/bing/mappers.js";
 
 test("validateDateRange accepts valid chronological YYYY-MM-DD dates", () => {
   assert.doesNotThrow(() => validateDateRange("2026-01-01", "2026-01-31"));

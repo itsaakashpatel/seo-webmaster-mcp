@@ -1,141 +1,135 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { registry } from "../core/registry.js";
-import { getErrorMessage } from "../core/errors.js";
-import { okText, errText } from "../core/responses.js";
+import { code, fieldList } from "../core/markdown.js";
+import { okText } from "../core/responses.js";
+import type {
+  Issue,
+  MobileUsability,
+  RichResultGroup,
+  RichResults,
+  UrlInspectionResult,
+} from "../core/types.js";
+import { isHttpUrl } from "../core/urls.js";
+import { providers } from "../providers/index.js";
+import { READ_ONLY, engineSchema, siteUrlSchema, withErrorBoundary } from "./shared.js";
 
-function isHttpUrl(value: string): boolean {
-  try {
-    const url = new URL(value.trim());
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
+const MAX_REFERRING_URLS = 5;
+
+function severityPrefix(issue: Issue): string {
+  return issue.severity ? `[${issue.severity}] ` : "";
+}
+
+function optionalCode(value: string | undefined): string | undefined {
+  return value === undefined ? undefined : code(value);
+}
+
+function renderIndexStatus(res: UrlInspectionResult): string[] {
+  const sitemaps = res.sitemaps?.length ? res.sitemaps.map(code).join(", ") : undefined;
+  const referring = (res.referringUrls ?? [])
+    .slice(0, MAX_REFERRING_URLS)
+    .map((url) => `  - ${code(url)}`);
+  return [
+    "### Indexing Status",
+    ...fieldList([
+      ["Overall Verdict", code(res.verdict)],
+      ["Coverage State", res.coverageState],
+      ["Indexing State", res.indexingState],
+      ["Page Fetch", res.pageFetchState],
+      ["Robots.txt", res.robotsTxtState],
+      ["Last Crawled", res.lastCrawlTime],
+      [
+        "Site Last Crawled",
+        res.siteLastCrawlTime && `${res.siteLastCrawlTime} (site-level crawl context)`,
+      ],
+      ["Crawled As", res.crawledAs],
+      ["User Canonical", optionalCode(res.userCanonical)],
+      ["Google Canonical", optionalCode(res.googleCanonical)],
+      ["Sitemaps", sitemaps],
+    ]),
+    ...(referring.length > 0 ? ["- **Referring URLs:**", ...referring] : []),
+    "",
+  ];
+}
+
+function renderMobileUsability(mobile: MobileUsability): string[] {
+  const issues = mobile.issues.map(
+    (issue) => `  - ${severityPrefix(issue)}**${issue.issueType}**: ${issue.message ?? ""}`,
+  );
+  const fallback =
+    mobile.verdict === "UNKNOWN"
+      ? "- Verdict unknown; provider did not return mobile data."
+      : "- No mobile usability issues found.";
+  return [
+    "### Mobile Usability",
+    `- **Verdict:** ${code(mobile.verdict)}`,
+    ...(issues.length > 0 ? ["- **Issues Detected:**", ...issues] : [fallback]),
+    "",
+  ];
+}
+
+function renderRichResultGroup(group: RichResultGroup): string[] {
+  const items = group.items.flatMap((item) =>
+    item.issues.length > 0
+      ? item.issues.map(
+          (issue) => `    - ${severityPrefix(issue)}${issue.message ?? "Schema issue"}`,
+        )
+      : [`    - Valid${item.name ? ` (${item.name})` : ""}`],
+  );
+  return [`  - **${group.type}**:`, ...items];
+}
+
+function renderRichResults(rich: RichResults): string[] {
+  const groups = rich.detectedItems.flatMap(renderRichResultGroup);
+  return [
+    "### Rich Results (Structured Data)",
+    `- **Verdict:** ${code(rich.verdict)}`,
+    ...(groups.length > 0
+      ? ["- **Detected Schema Items:**", ...groups]
+      : ["- No rich result items detected on this URL."]),
+  ];
+}
+
+export function renderInspection(res: UrlInspectionResult, providerName: string): string {
+  return [
+    `## URL Inspection: ${code(res.inspectionUrl)}`,
+    `- **Provider:** ${providerName}`,
+    `- **Property:** ${code(res.siteUrl)}`,
+    "",
+    ...renderIndexStatus(res),
+    ...(res.mobileUsability ? renderMobileUsability(res.mobileUsability) : []),
+    ...(res.richResults ? renderRichResults(res.richResults) : []),
+  ].join("\n");
 }
 
 export function registerInspectUrlTool(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "inspect_url",
-    "Inspect a URL in Google Search Console or Bing Webmaster Tools to check live indexing status, crawl info, canonical URLs, mobile usability, and rich results (schema validation). Note: Bing does not offer URL-level inspection; Bing returns UNKNOWN with crawl context only.",
     {
-      siteUrl: z
-        .string()
-        .min(1)
-        .describe(
-          "Site URL as verified in Search Console (e.g. https://example.com/ or sc-domain:example.com)",
-        ),
-      inspectionUrl: z
-        .string()
-        .min(1)
-        .refine((v: string) => isHttpUrl(v), "inspectionUrl must be a full http(s) URL")
-        .describe("The fully qualified URL to inspect (must belong to the site property)"),
-      engine: z
-        .enum(["google", "bing"])
-        .optional()
-        .default("google")
-        .describe("Search engine to inspect on: 'google' or 'bing' (default: 'google')"),
-      languageCode: z
-        .string()
-        .optional()
-        .describe("Language code for issue messages (e.g. 'en-US')"),
+      title: "Inspect URL",
+      description:
+        "Inspect a URL in Google Search Console or Bing Webmaster Tools to check live indexing status, crawl info, canonical URLs, mobile usability, and rich results (schema validation). Note: Bing does not offer URL-level inspection; Bing returns UNKNOWN with crawl context only.",
+      inputSchema: {
+        siteUrl: siteUrlSchema,
+        inspectionUrl: z
+          .string()
+          .trim()
+          .refine(isHttpUrl, "inspectionUrl must be a full http(s) URL")
+          .describe("The fully qualified URL to inspect (must belong to the site property)"),
+        engine: engineSchema,
+        languageCode: z
+          .string()
+          .optional()
+          .describe("Language code for issue messages (e.g. 'en-US')"),
+      },
+      annotations: READ_ONLY,
     },
-    async ({ siteUrl, inspectionUrl, engine, languageCode }) => {
-      try {
-        const cleanSite: string = siteUrl.trim();
-        const cleanUrl: string = inspectionUrl.trim();
-        if (cleanSite.length === 0) {
-          throw new Error("siteUrl must be non-empty.");
-        }
-        const provider = registry.get(engine);
-        if (!provider) {
-          throw new Error(`Provider "${engine}" is not registered.`);
-        }
-
-        if (!provider.inspectUrl) {
-          throw new Error(`URL inspection is not supported by ${provider.displayName}.`);
-        }
-
-        const res = await provider.inspectUrl(cleanSite, cleanUrl, languageCode);
-        const lines: string[] = [];
-
-        lines.push(`## URL Inspection: \`${res.inspectionUrl}\``);
-        lines.push(`- **Provider:** ${provider.displayName}`);
-        lines.push(`- **Property:** \`${res.siteUrl}\``);
-        lines.push("");
-
-        lines.push("### Indexing Status");
-        lines.push(`- **Overall Verdict:** \`${res.verdict}\``);
-        if (res.coverageState) lines.push(`- **Coverage State:** ${res.coverageState}`);
-        if (res.indexingState) lines.push(`- **Indexing State:** ${res.indexingState}`);
-        if (res.pageFetchState) lines.push(`- **Page Fetch:** ${res.pageFetchState}`);
-        if (res.robotsTxtState) lines.push(`- **Robots.txt:** ${res.robotsTxtState}`);
-        if (res.lastCrawlTime) lines.push(`- **Last Crawled:** ${res.lastCrawlTime}`);
-        if (res.siteLastCrawlTime) {
-          lines.push(
-            `- **Site Last Crawled:** ${res.siteLastCrawlTime} (site-level crawl context)`,
-          );
-        }
-        if (res.crawledAs) lines.push(`- **Crawled As:** ${res.crawledAs}`);
-        if (res.userCanonical) lines.push(`- **User Canonical:** \`${res.userCanonical}\``);
-        if (res.googleCanonical) lines.push(`- **Google Canonical:** \`${res.googleCanonical}\``);
-        if (res.sitemaps && res.sitemaps.length > 0) {
-          lines.push(`- **Sitemaps:** ${res.sitemaps.map((s: string) => `\`${s}\``).join(", ")}`);
-        }
-        if (res.referringUrls && res.referringUrls.length > 0) {
-          lines.push("- **Referring URLs:**");
-          for (const r of res.referringUrls.slice(0, 5)) {
-            lines.push(`  - \`${r}\``);
-          }
-        }
-        lines.push("");
-
-        if (res.mobileUsability) {
-          lines.push("### Mobile Usability");
-          lines.push(`- **Verdict:** \`${res.mobileUsability.verdict}\``);
-          if (res.mobileUsability.issues && res.mobileUsability.issues.length > 0) {
-            lines.push("- **Issues Detected:**");
-            for (const issue of res.mobileUsability.issues) {
-              const sev: string = issue.severity ? `[${issue.severity}] ` : "";
-              lines.push(`  - ${sev}**${issue.issueType}**: ${issue.message || ""}`);
-            }
-          } else if (res.mobileUsability.verdict === "UNKNOWN") {
-            lines.push("- Verdict unknown; provider did not return mobile data.");
-          } else {
-            lines.push("- No mobile usability issues found.");
-          }
-          lines.push("");
-        }
-
-        if (res.richResults) {
-          lines.push("### Rich Results (Structured Data)");
-          lines.push(`- **Verdict:** \`${res.richResults.verdict}\``);
-          if (res.richResults.detectedItems && res.richResults.detectedItems.length > 0) {
-            lines.push("- **Detected Schema Items:**");
-            for (const itemGroup of res.richResults.detectedItems) {
-              lines.push(`  - **${itemGroup.type}**:`);
-              if (itemGroup.items && itemGroup.items.length > 0) {
-                for (const item of itemGroup.items) {
-                  const nameStr: string = item.name ? ` (${item.name})` : "";
-                  if (item.issues && item.issues.length > 0) {
-                    for (const iss of item.issues) {
-                      const sev: string = iss.severity ? `[${iss.severity}] ` : "";
-                      lines.push(`    - ${sev}${iss.message || "Schema issue"}`);
-                    }
-                  } else {
-                    lines.push(`    - Valid${nameStr}`);
-                  }
-                }
-              }
-            }
-          } else {
-            lines.push("- No rich result items detected on this URL.");
-          }
-        }
-
-        return okText(lines.join("\n"));
-      } catch (error: unknown) {
-        return errText(`Error inspecting URL: ${getErrorMessage(error)}`);
-      }
-    },
+    withErrorBoundary(
+      "Error inspecting URL",
+      async ({ siteUrl, inspectionUrl, engine, languageCode }) => {
+        const provider = providers[engine];
+        const res = await provider.inspectUrl(siteUrl, inspectionUrl, languageCode);
+        return okText(renderInspection(res, provider.displayName));
+      },
+    ),
   );
 }

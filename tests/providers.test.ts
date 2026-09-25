@@ -3,10 +3,7 @@ import assert from "node:assert/strict";
 import { formatBingError, isBingConfigured } from "../build/providers/bing/auth.js";
 import { BingWebmasterProvider } from "../build/providers/bing/provider.js";
 import { formatGoogleError, isGoogleConfigured } from "../build/providers/google/auth.js";
-import {
-  GoogleSearchConsoleProvider,
-  normalizeGoogleDimensions,
-} from "../build/providers/google/provider.js";
+import { GoogleSearchConsoleProvider } from "../build/providers/google/provider.js";
 import { isIndexNowConfigured } from "../build/providers/indexnow/provider.js";
 
 test("formatBingError formats 401 unauthorized with setup guidance", () => {
@@ -45,11 +42,6 @@ test("formatGoogleError formats 429 quota error by context", () => {
   const indexingMsg: string = formatGoogleError(err, "indexing");
   assert.ok(indexingMsg.includes("Quota exceeded (429)"));
   assert.ok(indexingMsg.includes("200 publish requests per day"));
-});
-
-test("normalizeGoogleDimensions filters unsupported dimensions", () => {
-  const result: string[] = normalizeGoogleDimensions(["query", "invalid_dim", "page", "date"]);
-  assert.deepEqual(result, ["query", "page", "date"]);
 });
 
 test("BingWebmasterProvider implements SearchEngineProvider contract", () => {

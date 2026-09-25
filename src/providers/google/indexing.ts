@@ -1,136 +1,118 @@
-import {
-  GoogleIndexingSubmissionResult,
+import type { indexing_v3 } from "googleapis";
+import { MAX_GOOGLE_INDEXING_URLS } from "../../core/constants.js";
+import { getErrorCode } from "../../core/errors.js";
+import type {
   GoogleIndexingItemResult,
+  GoogleIndexingSubmissionResult,
   GoogleIndexingType,
 } from "../../core/types.js";
-import {
-  getGoogleIndexingClient,
-  isGoogleIndexingConfigured,
-  getGoogleIndexingConfigurationGuide,
-  formatGoogleError,
-  detectGoogleCredentials,
-} from "./auth.js";
-import { getErrorCode } from "../../core/errors.js";
-import { MAX_GOOGLE_INDEXING_URLS } from "../../core/validation.js";
 import { dedupeUrls, validateHttpsUrls } from "../../core/urls.js";
+import {
+  GOOGLE_INDEXING_SETUP_GUIDE,
+  detectGoogleCredentials,
+  formatGoogleError,
+  getIndexingClient,
+} from "./auth.js";
 
-export const GOOGLE_INDEXING_QUOTA_PER_DAY = MAX_GOOGLE_INDEXING_URLS;
+const BATCH_CONCURRENCY = 5;
+const QUOTA_EXCEEDED = 429;
 
-export function isIndexingConfigured(): boolean {
-  return isGoogleIndexingConfigured();
+export interface GoogleIndexingOptions {
+  readonly urls: readonly string[];
+  readonly type?: GoogleIndexingType;
 }
 
-export function getIndexingGuide(): string {
-  return getGoogleIndexingConfigurationGuide();
+function validateUrls(urls: readonly string[]): string[] {
+  const unique = dedupeUrls(urls);
+  if (unique.length === 0) {
+    throw new Error("No valid URLs provided to submit.");
+  }
+  if (unique.length > MAX_GOOGLE_INDEXING_URLS) {
+    throw new Error(
+      `Too many URLs (${unique.length}). Google Indexing API allows max ${MAX_GOOGLE_INDEXING_URLS} per call (default daily quota is 200). Split into smaller batches.`,
+    );
+  }
+  const invalid = validateHttpsUrls(unique);
+  if (invalid.length > 0) {
+    throw new Error(
+      `${invalid.length} URL(s) are not valid http(s) URLs (e.g. ${invalid.slice(0, 3).join(", ")}). All URLs must be fully qualified.`,
+    );
+  }
+  return unique;
 }
 
-function toItemError(
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+    items.slice(index * size, (index + 1) * size),
+  );
+}
+
+async function publish(
+  client: indexing_v3.Indexing,
   url: string,
   type: GoogleIndexingType,
-  err: unknown,
-): GoogleIndexingItemResult {
-  const code: number | undefined = getErrorCode(err);
+): Promise<GoogleIndexingItemResult> {
+  try {
+    const res = await client.urlNotifications.publish({ requestBody: { url, type } });
+    const meta = res.data.urlNotificationMetadata;
+    return {
+      url,
+      type,
+      success: true,
+      statusCode: 200,
+      message: "Notification accepted. Google may recrawl (update) or drop (delete) the URL soon.",
+      notifyTime: meta?.latestUpdate?.notifyTime ?? meta?.latestRemove?.notifyTime ?? undefined,
+    };
+  } catch (err: unknown) {
+    return {
+      url,
+      type,
+      success: false,
+      statusCode: getErrorCode(err) ?? 0,
+      message: formatGoogleError(err, "indexing"),
+    };
+  }
+}
+
+function skipped(url: string, type: GoogleIndexingType): GoogleIndexingItemResult {
   return {
     url,
     type,
     success: false,
-    statusCode: code ?? 0,
-    message: formatGoogleError(err, "indexing"),
+    statusCode: QUOTA_EXCEEDED,
+    message: "Skipped: quota exhausted earlier in this batch (429). Retry remaining URLs tomorrow.",
   };
 }
 
-export async function submitToGoogleIndexing(options: {
-  urls: string[];
-  type?: GoogleIndexingType;
-}): Promise<GoogleIndexingSubmissionResult> {
-  const notificationType: GoogleIndexingType = options.type ?? "URL_UPDATED";
-  if (notificationType !== "URL_UPDATED" && notificationType !== "URL_DELETED") {
-    throw new Error(`Invalid type "${options.type}". Use "URL_UPDATED" or "URL_DELETED".`);
+/**
+ * Publishes URL notifications in batches of 5 parallel requests. After the first 429 (quota
+ * exhausted) response, the remaining URLs are reported as skipped and are not sent.
+ */
+export async function submitToGoogleIndexing({
+  urls,
+  type = "URL_UPDATED",
+}: GoogleIndexingOptions): Promise<GoogleIndexingSubmissionResult> {
+  const unique = validateUrls(urls);
+  if (!(await detectGoogleCredentials())) {
+    throw new Error(GOOGLE_INDEXING_SETUP_GUIDE);
   }
-  const deduped: string[] = dedupeUrls(options.urls);
-  if (deduped.length === 0) {
-    throw new Error("No valid URLs provided to submit.");
-  }
-  if (deduped.length > MAX_GOOGLE_INDEXING_URLS) {
-    throw new Error(
-      `Too many URLs (${deduped.length}). Google Indexing API allows max ${MAX_GOOGLE_INDEXING_URLS} per call (default daily quota is 200). Split into smaller batches.`,
-    );
-  }
-  const bad: string[] = validateHttpsUrls(deduped);
-  if (bad.length > 0) {
-    const sample: string = bad.slice(0, 3).join(", ");
-    throw new Error(
-      `${bad.length} URL(s) are not valid http(s) URLs (e.g. ${sample}). All URLs must be fully qualified.`,
-    );
-  }
-  if (!isGoogleIndexingConfigured()) {
-    const detected: boolean = await detectGoogleCredentials();
-    if (!detected) {
-      throw new Error(getGoogleIndexingConfigurationGuide());
-    }
-  }
-
-  const client = getGoogleIndexingClient();
+  const client = getIndexingClient();
   const items: GoogleIndexingItemResult[] = [];
-  const BATCH_CONCURRENCY = 5;
-  let quotaExhausted = false;
-
-  for (let i = 0; i < deduped.length; i += BATCH_CONCURRENCY) {
-    if (quotaExhausted) {
-      const remaining: string[] = deduped.slice(i);
-      for (const rest of remaining) {
-        items.push({
-          url: rest,
-          type: notificationType,
-          success: false,
-          statusCode: 429,
-          message:
-            "Skipped: quota exhausted earlier in this batch (429). Retry remaining URLs tomorrow.",
-        });
-      }
-      break;
-    }
-
-    const batch: string[] = deduped.slice(i, i + BATCH_CONCURRENCY);
-    const batchResults: GoogleIndexingItemResult[] = await Promise.all(
-      batch.map(async (url: string) => {
-        try {
-          const res = await client.urlNotifications.publish({
-            requestBody: { url, type: notificationType },
-          });
-          const meta = res.data.urlNotificationMetadata;
-          const notifyTime: string | undefined =
-            meta?.latestUpdate?.notifyTime ?? meta?.latestRemove?.notifyTime ?? undefined;
-          return {
-            url,
-            type: notificationType,
-            success: true,
-            statusCode: 200,
-            message:
-              "Notification accepted. Google may recrawl (update) or drop (delete) the URL soon.",
-            notifyTime,
-          };
-        } catch (err: unknown) {
-          return toItemError(url, notificationType, err);
-        }
-      }),
-    );
-
-    for (const item of batchResults) {
-      items.push(item);
-      if (item.statusCode === 429) {
-        quotaExhausted = true;
-      }
-    }
+  for (const batch of chunk(unique, BATCH_CONCURRENCY)) {
+    const quotaExhausted = items.some((item) => item.statusCode === QUOTA_EXCEEDED);
+    const results = quotaExhausted
+      ? batch.map((url) => skipped(url, type))
+      : // oxlint-disable-next-line no-await-in-loop -- batches run in sequence to cap concurrency.
+        await Promise.all(batch.map((url) => publish(client, url, type)));
+    items.push(...results);
   }
-
-  const successCount: number = items.filter((i: GoogleIndexingItemResult) => i.success).length;
+  const successCount = items.filter((item) => item.success).length;
   return {
     engine: "google",
-    submittedCount: deduped.length,
+    submittedCount: unique.length,
     successCount,
     failureCount: items.length - successCount,
-    notificationType,
+    notificationType: type,
     items,
   };
 }

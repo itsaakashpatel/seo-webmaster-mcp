@@ -1,12 +1,14 @@
-export function okText(text: string): {
-  content: [{ type: "text"; text: string }];
-} {
-  return { content: [{ type: "text" as const, text }] };
+/** The text-only subset of an MCP `CallToolResult` that every tool returns. */
+export interface ToolResult {
+  [key: string]: unknown;
+  content: Array<{ type: "text"; text: string }>;
+  isError?: boolean;
 }
 
-export function errText(text: string): {
-  isError: true;
-  content: [{ type: "text"; text: string }];
-} {
-  return { isError: true as const, content: [{ type: "text" as const, text }] };
+export function okText(text: string): ToolResult {
+  return { content: [{ type: "text", text }] };
+}
+
+export function errText(text: string): ToolResult {
+  return { isError: true, content: [{ type: "text", text }] };
 }

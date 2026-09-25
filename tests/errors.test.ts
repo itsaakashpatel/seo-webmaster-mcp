@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getErrorCode, getErrorMessage, withCode } from "../build/core/errors.js";
+import { HttpError, getErrorCode, getErrorMessage } from "../build/core/errors.js";
 
 test("getErrorCode extracts integer codes from direct properties", () => {
   assert.equal(getErrorCode({ code: 403 }), 403);
@@ -45,10 +45,11 @@ test("getErrorMessage safely converts any value to string", () => {
   assert.equal(getErrorMessage(undefined), "undefined");
 });
 
-test("withCode attaches code and returns augmented Error", () => {
-  const err = new Error("Resource not found");
-  const coded = withCode(err, 404);
-  assert.equal(coded.code, 404);
-  assert.equal(coded.message, "Resource not found");
-  assert.equal(getErrorCode(coded), 404);
+test("HttpError carries the status for getErrorCode", () => {
+  const err = new HttpError("Resource not found", 404);
+  assert.ok(err instanceof Error);
+  assert.equal(err.name, "HttpError");
+  assert.equal(err.status, 404);
+  assert.equal(getErrorCode(err), 404);
+  assert.equal(getErrorCode(new Error("wrapped", { cause: err })), 404);
 });

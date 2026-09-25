@@ -1,110 +1,81 @@
-import { getErrorMessage } from "./errors.js";
+import { isRecord } from "./guards.js";
 
-export function dedupeUrls(urls: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const url of urls) {
-    const trimmed: string = url.trim();
-    if (trimmed.length === 0) {
-      continue;
-    }
-    if (!seen.has(trimmed)) {
-      seen.add(trimmed);
-      out.push(trimmed);
-    }
+const JSON_ARRAY_ERROR = 'URL JSON must be an array of strings (e.g. ["https://..."]).';
+const NON_STRING_ERROR = "URL JSON must be an array of strings; found non-string entry.";
+
+/** Parses a value as an http(s) URL. Returns `undefined` for any other scheme or bad input. */
+export function parseHttpUrl(value: string): URL | undefined {
+  const trimmed = value.trim();
+  if (!URL.canParse(trimmed)) {
+    return undefined;
   }
-  return out;
+  const url = new URL(trimmed);
+  return url.protocol === "http:" || url.protocol === "https:" ? url : undefined;
 }
 
-export function validateHttpsUrls(urls: string[]): string[] {
-  const bad: string[] = [];
-  for (const raw of urls) {
-    try {
-      const url = new URL(raw.trim());
-      if (url.protocol !== "http:" && url.protocol !== "https:") {
-        bad.push(raw);
-      }
-    } catch {
-      bad.push(raw);
-    }
-  }
-  return bad;
+export function isHttpUrl(value: string): boolean {
+  return parseHttpUrl(value) !== undefined;
 }
 
-export function urlsBelongToHost(urls: string[], host: string): string[] {
-  const bad: string[] = [];
-  const lowerHost: string = host.toLowerCase();
-  for (const raw of urls) {
-    try {
-      const url = new URL(raw);
-      if (url.protocol !== "http:" && url.protocol !== "https:") {
-        bad.push(raw);
-        continue;
-      }
-      if (url.hostname.toLowerCase() !== lowerHost) {
-        bad.push(raw);
-      }
-    } catch {
-      bad.push(raw);
-    }
-  }
-  return bad;
+/** Trims each URL, drops empty entries, and removes duplicates. Keeps the first-seen order. */
+export function dedupeUrls(urls: readonly string[]): string[] {
+  return [...new Set(urls.map((url) => url.trim()).filter((url) => url.length > 0))];
 }
 
-function parseJsonStringArray(trimmed: string): string[] {
-  const parsed: unknown = JSON.parse(trimmed);
-  if (!Array.isArray(parsed)) {
-    throw new Error("URL JSON must be an array of strings.");
-  }
-  const out: string[] = [];
-  for (const entry of parsed) {
-    if (typeof entry !== "string") {
-      throw new Error("URL JSON must be an array of strings; found non-string entry.");
-    }
-    const t: string = entry.trim();
-    if (t.length > 0) {
-      out.push(t);
-    }
-  }
-  return out;
+/** Returns the entries that are not valid http(s) URLs. */
+export function validateHttpsUrls(urls: readonly string[]): string[] {
+  return urls.filter((url) => !isHttpUrl(url));
 }
 
-function splitDelimitedList(trimmed: string): string[] {
-  return trimmed
+/** Returns the entries that are not http(s) URLs on exactly this host. */
+export function urlsBelongToHost(urls: readonly string[], host: string): string[] {
+  const expected = host.toLowerCase();
+  return urls.filter((url) => parseHttpUrl(url)?.hostname.toLowerCase() !== expected);
+}
+
+function splitDelimitedList(text: string): string[] {
+  return text
     .split(/[\r\n,]+/)
-    .map((u: string) => u.trim())
-    .filter((u: string) => u.length > 0);
+    .map((url) => url.trim())
+    .filter((url) => url.length > 0);
 }
 
+function tryParseJson(text: string): unknown {
+  try {
+    const json: unknown = JSON.parse(text);
+    return json;
+  } catch {
+    // Not JSON. The caller decides whether to fall back to a delimited list.
+    return undefined;
+  }
+}
+
+function toStringList(list: unknown): string[] {
+  if (!Array.isArray(list)) {
+    throw new Error(JSON_ARRAY_ERROR);
+  }
+  const strings = list.filter((entry): entry is string => typeof entry === "string");
+  if (strings.length !== list.length) {
+    throw new Error(NON_STRING_ERROR);
+  }
+  return splitDelimitedList(strings.join("\n"));
+}
+
+/**
+ * Parses a URL list from tool input. It accepts a JSON array, a JSON object with a `urls` array,
+ * or a comma- or newline-separated list.
+ */
 export function parseUrlList(raw: string): string[] {
-  const trimmed: string = raw.trim();
-  if (trimmed.length === 0) {
-    return [];
+  const trimmed = raw.trim();
+  const isJsonArray = trimmed.startsWith("[") && trimmed.endsWith("]");
+  const isJsonObject = trimmed.startsWith("{") && trimmed.endsWith("}");
+  if (!isJsonArray && !isJsonObject) {
+    return splitDelimitedList(trimmed);
   }
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    try {
-      const parsed: unknown = JSON.parse(trimmed);
-      if (typeof parsed === "object" && parsed !== null && "urls" in parsed) {
-        const candidate: unknown = (parsed as Record<string, unknown>)["urls"];
-        if (Array.isArray(candidate)) {
-          return parseJsonStringArray(JSON.stringify(candidate));
-        }
-      }
-    } catch {
-      // ignore
-    }
-    throw new Error('URL JSON must be an array of strings (e.g. ["https://..."]).');
+  const parsed = tryParseJson(trimmed);
+  if (parsed === undefined && isJsonArray) {
+    // Tolerate an unquoted list such as [https://a.com, https://b.com].
+    return splitDelimitedList(trimmed.slice(1, -1));
   }
-  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-    try {
-      return parseJsonStringArray(trimmed);
-    } catch (err: unknown) {
-      const msg: string = getErrorMessage(err);
-      if (msg.includes("must be an array of strings")) {
-        throw err;
-      }
-      return splitDelimitedList(trimmed);
-    }
-  }
-  return splitDelimitedList(trimmed);
+  return toStringList(isRecord(parsed) ? parsed.urls : parsed);
 }
