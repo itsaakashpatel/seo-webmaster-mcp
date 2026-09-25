@@ -21,9 +21,14 @@ function createGoogleAuth(
   });
 }
 
-let detectedCredentials: boolean | null = null;
+// Only a positive result is cached, so a slow or failed probe is retried on the next call.
+let detectedCredentials = false;
+const ADC_PROBE_TIMEOUT_MS = 2000;
 
 function getAdcFilePath(): string | undefined {
+  if (process.env.CLOUDSDK_CONFIG) {
+    return `${process.env.CLOUDSDK_CONFIG}/application_default_credentials.json`;
+  }
   if (process.env.APPDATA) {
     return `${process.env.APPDATA}/gcloud/application_default_credentials.json`;
   }
@@ -35,8 +40,8 @@ function getAdcFilePath(): string | undefined {
 }
 
 export function isGoogleConfigured(): boolean {
-  if (detectedCredentials !== null) {
-    return detectedCredentials;
+  if (detectedCredentials) {
+    return true;
   }
   if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
     return true;
@@ -55,25 +60,27 @@ export function isGoogleConfigured(): boolean {
 }
 
 export async function detectGoogleCredentials(): Promise<boolean> {
-  if (detectedCredentials !== null) {
-    return detectedCredentials;
-  }
   if (isGoogleConfigured()) {
     detectedCredentials = true;
     return true;
   }
+  let timer: NodeJS.Timeout | undefined;
   try {
     const auth = new google.auth.GoogleAuth({ scopes: SCOPES });
-    const clientPromise = auth.getClient();
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("Timeout detecting ADC credentials")), 2000);
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("Timeout detecting ADC credentials")),
+        ADC_PROBE_TIMEOUT_MS,
+      );
     });
-    await Promise.race([clientPromise, timeoutPromise]);
+    await Promise.race([auth.getClient(), timeout]);
     detectedCredentials = true;
     return true;
   } catch {
-    detectedCredentials = false;
+    // No usable ADC. Do not cache the failure, so a later call can probe again.
     return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -164,10 +171,11 @@ export function formatGoogleError(
     msg.includes("User does not have sufficient permission") ||
     msg.includes("PERMISSION_DENIED")
   ) {
-    return (
-      `Permission error (403): ${msg}\n\n` +
-      "Make sure the service account email is added as a user with 'Restricted' or 'Full' permission in Google Search Console for this property."
-    );
+    const tip: string =
+      context === "indexing"
+        ? "The Indexing API requires the service account email to be added as an 'Owner' of this property in Google Search Console."
+        : "Make sure the service account email is added as a user with 'Restricted' or 'Full' permission in Google Search Console for this property.";
+    return `Permission error (403): ${msg}\n\n${tip}`;
   }
   if (code === 404) {
     return `Not found (404): ${msg}`;

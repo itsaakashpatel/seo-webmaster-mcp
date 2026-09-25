@@ -30,6 +30,10 @@ test("formatGoogleError formats 403 permission error with user role tip", () => 
   const msg: string = formatGoogleError(err);
   assert.ok(msg.includes("Permission error (403)"));
   assert.ok(msg.includes("Restricted"));
+
+  const indexingMsg: string = formatGoogleError(err, "indexing");
+  assert.ok(indexingMsg.includes("'Owner'"));
+  assert.ok(!indexingMsg.includes("Restricted"));
 });
 
 test("formatGoogleError formats 429 quota error by context", () => {
@@ -137,7 +141,7 @@ test("BingWebmasterProvider.queryAnalytics filters date range and aggregates wee
         Query: "seo tools",
         Clicks: 10,
         Impressions: 100,
-        AvgClickPosition: 2.0,
+        AvgClickPosition: 9.0, // ignored: impression position wins
         AvgImpressionPosition: 2.0,
         Date: "/Date(1689465600000)/", // 2023-07-16
       },
@@ -145,7 +149,7 @@ test("BingWebmasterProvider.queryAnalytics filters date range and aggregates wee
         Query: "seo tools",
         Clicks: 20,
         Impressions: 100,
-        AvgClickPosition: 1.0,
+        AvgClickPosition: -1, // Bing sentinel for "no value"
         AvgImpressionPosition: 1.0,
         Date: "/Date(1690070400000)/", // 2023-07-23
       },

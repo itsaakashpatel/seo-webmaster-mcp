@@ -207,7 +207,10 @@ export class BingWebmasterProvider implements SearchEngineProvider {
         const key: string = typeof r.Query === "string" ? r.Query : "unknown";
         const clicks: number = toNumber(r.Clicks);
         const impressions: number = toNumber(r.Impressions);
-        const posRaw: number = toNumber(r.AvgClickPosition) || toNumber(r.AvgImpressionPosition);
+        // Weight by impressions, so use the impression position. Bing sends -1 when it has no value.
+        const posRaw: number =
+          [r.AvgImpressionPosition, r.AvgClickPosition].map(toNumber).find((p: number) => p > 0) ??
+          0;
 
         const existing = aggregatedMap.get(key);
         if (existing) {
