@@ -1,218 +1,176 @@
-import { SearchEngineProvider } from "../../core/provider.js";
-import {
-  SiteInfo,
-  SearchAnalyticsQuery,
+import { summarizeRows } from "../../core/analytics.js";
+import { createTextMatcher, parseTextFilter } from "../../core/filters.js";
+import { asRecordArray } from "../../core/guards.js";
+import type { SearchEngineProvider } from "../../core/provider.js";
+import type {
   AnalyticsResult,
-  UrlInspectionResult,
+  SearchAnalyticsQuery,
+  SiteInfo,
   SitemapInfo,
+  UrlInspectionResult,
 } from "../../core/types.js";
 import {
-  isBingConfigured,
-  getBingApiKey,
-  getBingConfigurationGuide,
-  formatBingError,
-} from "./auth.js";
+  clampRowLimit,
+  clampStartRow,
+  normalizeSitemapKey,
+  requireText,
+  validateDateRange,
+} from "../../core/validation.js";
+import { BING_SETUP_GUIDE, bingGet, isBingConfigured, withBingErrors } from "./auth.js";
+import {
+  aggregateRows,
+  isInDateRange,
+  latestCrawlDate,
+  rowKey,
+  toSiteInfo,
+  toSitemapInfo,
+} from "./mappers.js";
 
-const BING_API_BASE = "https://ssl.bing.com/webmaster/api.json";
+const BING_MAX_ROWS = 5000;
+const DEFAULT_ROW_LIMIT = 100;
 
-async function bingFetch(endpoint: string, params: Record<string, string> = {}): Promise<any> {
-  const apiKey = getBingApiKey();
-  const url = new URL(`${BING_API_BASE}/${endpoint}`);
-  url.searchParams.set("apikey", apiKey);
+/** Bing returns one dimension per call: query stats or page stats. */
+type BingMode = "query" | "page";
 
-  for (const [k, v] of Object.entries(params)) {
-    url.searchParams.set(k, v);
-  }
-
-  const res = await fetch(url.toString(), {
-    headers: {
-      Accept: "application/json",
-      "User-Agent": "seo-webmaster-mcp/1.0.0",
-    },
-  });
-
-  if (!res.ok) {
-    const errorText = await res.text().catch(() => "");
-    throw new Error(`Bing Webmaster API error (${res.status}): ${errorText || res.statusText}`);
-  }
-
-  const json = await res.json();
-  return json?.d !== undefined ? json.d : json;
+function resolveMode(query: SearchAnalyticsQuery): BingMode {
+  const dimensions = query.dimensions ?? [];
+  const wantsPages = dimensions.includes("page") && !dimensions.includes("query");
+  const filtersPages = Boolean(query.pageFilter) && !query.queryFilter;
+  return wantsPages || filtersPages ? "page" : "query";
 }
 
+/** Explains every requested option that Bing cannot honor. */
+function buildNotes(query: SearchAnalyticsQuery, mode: BingMode): string[] {
+  const otherDimensions = (query.dimensions ?? []).filter((dimension) => dimension !== mode);
+  const rules: ReadonlyArray<readonly [boolean, string]> = [
+    [
+      mode === "page" && Boolean(query.queryFilter),
+      "queryFilter was ignored because page mode was active.",
+    ],
+    [
+      mode === "query" && Boolean(query.pageFilter),
+      "pageFilter was ignored because query mode was active. Specify dimensions: ['page'] to query page stats.",
+    ],
+    [Boolean(query.countryFilter), "countryFilter is ignored for Bing."],
+    [Boolean(query.deviceFilter), "deviceFilter is ignored for Bing."],
+    [
+      query.searchType !== undefined && query.searchType !== "web",
+      `searchType '${query.searchType}' is not supported by Bing; web results returned.`,
+    ],
+    [
+      query.dataState !== undefined && query.dataState !== "all",
+      `dataState '${query.dataState}' is ignored for Bing.`,
+    ],
+    [
+      otherDimensions.length > 0,
+      `Bing returns single-dimension statistics (${mode}). Additional requested dimensions are not supported.`,
+    ],
+    [
+      true,
+      `Bing returns weekly bucketed statistics. Data was filtered client-side between ${query.startDate} and ${query.endDate} and aggregated per ${mode}.`,
+    ],
+  ];
+  return rules.filter(([applies]) => applies).map(([, note]) => note);
+}
+
+function createRowFilter(
+  query: SearchAnalyticsQuery,
+  mode: BingMode,
+): (row: Record<string, unknown>) => boolean {
+  const rawFilter = mode === "page" ? query.pageFilter : query.queryFilter;
+  const matches = rawFilter
+    ? createTextMatcher(parseTextFilter(rawFilter, `${mode}Filter`))
+    : (): boolean => true;
+  return (row) => isInDateRange(row, query.startDate, query.endDate) && matches(rowKey(row));
+}
+
+/** The adapter for the Bing Webmaster JSON API. */
 export class BingWebmasterProvider implements SearchEngineProvider {
   readonly engine = "bing" as const;
   readonly displayName = "Bing Webmaster Tools";
+  readonly authMethod = "API Key (BING_WEBMASTER_API_KEY)";
 
   isConfigured(): boolean {
     return isBingConfigured();
   }
 
   getConfigurationGuide(): string {
-    return getBingConfigurationGuide();
+    return BING_SETUP_GUIDE;
   }
 
-  async listSites(): Promise<SiteInfo[]> {
-    try {
-      const data = await bingFetch("GetUserSites");
-      const sites: any[] = Array.isArray(data) ? data : [];
-
-      return sites.map((s) => ({
-        siteUrl: s.Url || "",
-        permissionLevel: s.Role || "SiteOwner",
-        engine: "bing",
-      }));
-    } catch (err: any) {
-      throw new Error(formatBingError(err));
-    }
+  listSites(): Promise<SiteInfo[]> {
+    return withBingErrors(async () => asRecordArray(await bingGet("GetUserSites")).map(toSiteInfo));
   }
 
-  async queryAnalytics(query: SearchAnalyticsQuery): Promise<AnalyticsResult> {
-    try {
-      const data = await bingFetch("GetQueryStats", { siteUrl: query.siteUrl });
-      const rawRows: any[] = Array.isArray(data) ? data : [];
-
-      // Filter and transform rows
-      let filteredRows = rawRows;
-
-      if (query.queryFilter) {
-        const filter = query.queryFilter.trim();
-        if (filter.startsWith("regex:")) {
-          const re = new RegExp(filter.slice(6), "i");
-          filteredRows = filteredRows.filter((r) => re.test(r.Query || ""));
-        } else if (filter.startsWith("exact:")) {
-          const exact = filter.slice(6).toLowerCase();
-          filteredRows = filteredRows.filter(
-            (r) => (r.Query || "").toLowerCase() === exact
-          );
-        } else {
-          const term = filter.toLowerCase();
-          filteredRows = filteredRows.filter((r) =>
-            (r.Query || "").toLowerCase().includes(term)
-          );
-        }
-      }
-
-      const limit = Math.min(Math.max(query.rowLimit || 100, 1), 5000);
-      filteredRows = filteredRows.slice(0, limit);
-
-      let totalClicks = 0;
-      let totalImpressions = 0;
-      let weightedPositionSum = 0;
-
-      const rows = filteredRows.map((r) => {
-        const clicks = r.Clicks || 0;
-        const impressions = r.Impressions || 0;
-        const pos = r.AvgClickPosition || r.AvgImpressionPosition || 0;
-        const ctr = impressions > 0 ? clicks / impressions : 0;
-
-        totalClicks += clicks;
-        totalImpressions += impressions;
-        weightedPositionSum += pos * impressions;
-
-        return {
-          keys: [r.Query || "unknown"],
-          clicks,
-          impressions,
-          ctr,
-          position: pos,
-        };
-      });
-
-      const overallCtr =
-        totalImpressions > 0
-          ? ((totalClicks / totalImpressions) * 100).toFixed(2) + "%"
-          : "0.00%";
-      const overallPosition =
-        totalImpressions > 0
-          ? (weightedPositionSum / totalImpressions).toFixed(1)
-          : "0.0";
-
+  queryAnalytics(query: SearchAnalyticsQuery): Promise<AnalyticsResult> {
+    return withBingErrors(async () => {
+      validateDateRange(query.startDate, query.endDate);
+      const siteUrl = requireText(query.siteUrl, "siteUrl");
+      const mode = resolveMode(query);
+      const endpoint = mode === "page" ? "GetPageStats" : "GetQueryStats";
+      const keepRow = createRowFilter(query, mode);
+      const rows = aggregateRows(
+        asRecordArray(await bingGet(endpoint, { siteUrl })).filter(keepRow),
+      );
+      const effectiveLimit = clampRowLimit(query.rowLimit, BING_MAX_ROWS, DEFAULT_ROW_LIMIT);
+      const startRow = clampStartRow(query.startRow);
+      const paged = rows.slice(startRow, startRow + effectiveLimit);
       return {
-        engine: "bing",
+        engine: this.engine,
         siteUrl: query.siteUrl,
         startDate: query.startDate,
         endDate: query.endDate,
-        columns: ["Query"],
-        summary: {
-          totalClicks,
-          totalImpressions,
-          overallCtr,
-          overallPosition,
-        },
-        rows,
+        columns: [mode],
+        summary: summarizeRows(paged),
+        rows: paged,
+        effectiveLimit,
+        note: buildNotes(query, mode).join(" "),
       };
-    } catch (err: any) {
-      throw new Error(formatBingError(err));
-    }
+    });
   }
 
-  async inspectUrl(
-    siteUrl: string,
-    url: string
-  ): Promise<UrlInspectionResult> {
-    try {
-      // Bing Webmaster provides crawl statistics and URL data
-      let crawlData: any = null;
-      try {
-        crawlData = await bingFetch("GetCrawlStats", { siteUrl });
-      } catch {
-        // ignore if not available
+  /** Bing has no URL-level inspection. The result is UNKNOWN, with site-level crawl context. */
+  inspectUrl(siteUrl: string, url: string): Promise<UrlInspectionResult> {
+    return withBingErrors(async () => {
+      if (!isBingConfigured()) {
+        throw new Error(BING_SETUP_GUIDE);
       }
-
+      const site = requireText(siteUrl, "siteUrl");
+      const inspectionUrl = requireText(url, "inspectionUrl");
+      const crawlStats = await bingGet("GetCrawlStats", { siteUrl: site }).catch(
+        // Crawl stats are best-effort context. The inspection stays UNKNOWN without them.
+        () => [],
+      );
       return {
-        engine: "bing",
-        inspectionUrl: url,
-        siteUrl,
-        verdict: "INDEXED_OR_KNOWN",
-        coverageState: "Submitted to Bing Webmaster",
-        lastCrawlTime: crawlData?.[0]?.Date || undefined,
+        engine: this.engine,
+        inspectionUrl,
+        siteUrl: site,
+        verdict: "UNKNOWN",
+        coverageState:
+          "UNKNOWN: Bing Webmaster API does not provide URL-level inspection. Site crawl context is provided at property level.",
+        siteLastCrawlTime: latestCrawlDate(asRecordArray(crawlStats)),
         referringUrls: [],
         sitemaps: [],
-        mobileUsability: {
-          verdict: "PASS",
-          issues: [],
-        },
       };
-    } catch (err: any) {
-      throw new Error(formatBingError(err));
-    }
+    });
   }
 
-  async listSitemaps(siteUrl: string): Promise<SitemapInfo[]> {
-    try {
-      const data = await bingFetch("GetFeeds", { siteUrl });
-      const feeds: any[] = Array.isArray(data) ? data : [];
-
-      return feeds.map((f) => ({
-        path: f.Url || "",
-        engine: "bing",
-        lastSubmitted: f.LastSubmittedDate || undefined,
-        lastDownloaded: f.LastCrawledDate || undefined,
-        type: f.FeedType || "Sitemap",
-        errors: f.CrawlErrorCount || 0,
-        warnings: 0,
-        status: f.Status || "Submitted",
-        submittedUrls: f.SubmittedUrlCount || 0,
-        indexedUrls: f.IndexedUrlCount || 0,
-        contents: [
-          {
-            type: "web",
-            submitted: f.SubmittedUrlCount || 0,
-            indexed: f.IndexedUrlCount || 0,
-          },
-        ],
-      }));
-    } catch (err: any) {
-      throw new Error(formatBingError(err));
-    }
+  listSitemaps(siteUrl: string): Promise<SitemapInfo[]> {
+    return withBingErrors(async () => {
+      const site = requireText(siteUrl, "siteUrl");
+      return asRecordArray(await bingGet("GetFeeds", { siteUrl: site })).map(toSitemapInfo);
+    });
   }
 
   async getSitemap(siteUrl: string, feedpath: string): Promise<SitemapInfo> {
+    const feed = requireText(feedpath, "feedpath");
+    const target = normalizeSitemapKey(feed);
     const sitemaps = await this.listSitemaps(siteUrl);
-    const found = sitemaps.find((s) => s.path === feedpath);
+    const found = sitemaps.find((sitemap) => normalizeSitemapKey(sitemap.path) === target);
     if (!found) {
-      throw new Error(`Sitemap feed "${feedpath}" not found in Bing Webmaster Tools for ${siteUrl}`);
+      throw new Error(
+        `Sitemap feed "${feed}" not found in Bing Webmaster Tools for ${siteUrl.trim()}`,
+      );
     }
     return found;
   }

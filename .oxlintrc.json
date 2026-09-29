@@ -1,0 +1,47 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import", "typescript", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "rules": {
+    "eqeqeq": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "no-empty": "error",
+    "no-console": "off",
+    "no-await-in-loop": "error",
+    "curly": "error",
+    "no-else-return": "error",
+    "no-nested-ternary": "error",
+    "no-param-reassign": "error",
+    "complexity": ["error", 10],
+    "max-depth": ["error", 3],
+    "max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
+    "max-lines-per-function": ["error", { "max": 60, "skipBlankLines": true, "skipComments": true }],
+    "max-params": ["error", 4],
+    "import/no-default-export": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/explicit-module-boundary-types": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+    "unicorn/no-array-for-each": "error",
+    "unicorn/no-lonely-if": "error",
+    "unicorn/prefer-string-slice": "error",
+    "unicorn/prefer-number-properties": "error",
+    "oxc/no-accumulating-spread": "error"
+  },
+  "overrides": [
+    {
+      "files": ["tests/**/*.ts"],
+      "rules": {
+        "max-lines-per-function": "off",
+        "max-lines": "off"
+      }
+    }
+  ]
+}

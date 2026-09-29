@@ -1,100 +1,63 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { code } from "../core/markdown.js";
+import { okText } from "../core/responses.js";
+import type { IndexNowSubmissionResult } from "../core/types.js";
+import { parseUrlList } from "../core/urls.js";
 import { submitToIndexNow } from "../providers/indexnow/provider.js";
+import { SUBMIT, withErrorBoundary } from "./shared.js";
 
-export function registerSubmitUrlsTool(server: McpServer) {
-  server.tool(
+const MAX_LISTED_URLS = 10;
+
+export function renderIndexNowResult(res: IndexNowSubmissionResult): string {
+  const hidden = res.urlList.length - MAX_LISTED_URLS;
+  return [
+    "### IndexNow URL Submission Successful",
+    `- **Host:** ${code(res.host)}`,
+    `- **URLs Submitted:** ${res.submittedCount}`,
+    `- **Status:** ${res.statusCode} (${res.statusMessage})`,
+    "- **Target Engines:** Bing, Yandex, Seznam, Naver",
+    "\n**Submitted URLs:**",
+    ...res.urlList.slice(0, MAX_LISTED_URLS).map((url) => `- ${code(url)}`),
+    ...(hidden > 0 ? [`- *...and ${hidden} more URLs*`] : []),
+  ].join("\n");
+}
+
+export function registerSubmitUrlsTool(server: McpServer): void {
+  server.registerTool(
     "submit_urls_indexnow",
-    "Instantly notify Bing, Yandex, Seznam, and other IndexNow search engines about added, updated, or deleted URLs on your website.",
     {
-      host: z
-        .string()
-        .describe("The domain name of your site (e.g. 'example.com') without protocol"),
-      urls: z
-        .string()
-        .describe(
-          "Comma-separated or newline-separated list of full URLs to submit (or JSON array of URLs)"
-        ),
-      key: z
-        .string()
-        .optional()
-        .describe("IndexNow key (optional if INDEXNOW_KEY environment variable is set)"),
-      keyLocation: z
-        .string()
-        .optional()
-        .describe("Optional full URL to the key file if not at site root"),
+      title: "Submit URLs to IndexNow",
+      description:
+        "Instantly notify Bing, Yandex, Seznam, and other IndexNow search engines about added, updated, or deleted URLs on your website.",
+      inputSchema: {
+        host: z
+          .string()
+          .trim()
+          .min(1)
+          .describe("The domain name of your site (e.g. 'example.com') without protocol"),
+        urls: z
+          .string()
+          .min(1)
+          .describe(
+            "Comma-separated or newline-separated list of full URLs to submit (or JSON array of URLs)",
+          ),
+        key: z
+          .string()
+          .optional()
+          .describe(
+            "IndexNow key (sensitive; prefer INDEXNOW_KEY env var to avoid storing keys in chat history)",
+          ),
+        keyLocation: z
+          .string()
+          .optional()
+          .describe("Optional full URL to the key file if not at site root"),
+      },
+      annotations: SUBMIT,
     },
-    async ({ host, urls, key, keyLocation }) => {
-      try {
-        let parsedUrls: string[] = [];
-
-        const trimmed = urls.trim();
-        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-          try {
-            parsedUrls = JSON.parse(trimmed);
-          } catch {
-            parsedUrls = trimmed.split(/[\r\n,]+/).map((u) => u.trim());
-          }
-        } else {
-          parsedUrls = trimmed.split(/[\r\n,]+/).map((u) => u.trim());
-        }
-
-        parsedUrls = parsedUrls.filter((u) => u.length > 0);
-
-        if (parsedUrls.length === 0) {
-          return {
-            isError: true,
-            content: [
-              {
-                type: "text",
-                text: "No valid URLs provided to submit.",
-              },
-            ],
-          };
-        }
-
-        const cleanHost = host.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
-
-        const res = await submitToIndexNow({
-          host: cleanHost,
-          urls: parsedUrls,
-          key,
-          keyLocation,
-        });
-
-        const lines: string[] = [];
-        lines.push("### IndexNow URL Submission Successful 🚀");
-        lines.push(`- **Host:** \`${res.host}\``);
-        lines.push(`- **URLs Submitted:** ${res.submittedCount}`);
-        lines.push(`- **Status:** ${res.statusCode} (${res.statusMessage})`);
-        lines.push(`- **Target Engines:** Bing, Yandex, Seznam, Naver`);
-        lines.push("\n**Submitted URLs:**");
-        for (const u of res.urlList.slice(0, 10)) {
-          lines.push(`- \`${u}\``);
-        }
-        if (res.urlList.length > 10) {
-          lines.push(`- *...and ${res.urlList.length - 10} more URLs*`);
-        }
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: lines.join("\n"),
-            },
-          ],
-        };
-      } catch (error: any) {
-        return {
-          isError: true,
-          content: [
-            {
-              type: "text",
-              text: `IndexNow submission error: ${error.message}`,
-            },
-          ],
-        };
-      }
-    }
+    withErrorBoundary("IndexNow submission error", async ({ host, urls, key, keyLocation }) => {
+      const res = await submitToIndexNow({ host, urls: parseUrlList(urls), key, keyLocation });
+      return okText(renderIndexNowResult(res));
+    }),
   );
 }

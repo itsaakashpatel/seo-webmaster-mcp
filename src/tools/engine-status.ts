@@ -1,66 +1,84 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { registry } from "../core/registry.js";
-import { isIndexNowConfigured, getIndexNowConfigurationGuide } from "../providers/indexnow/provider.js";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { code, markdownTable } from "../core/markdown.js";
+import { okText } from "../core/responses.js";
+import { providers } from "../providers/index.js";
+import {
+  GOOGLE_INDEXING_SETUP_GUIDE,
+  detectGoogleCredentials,
+  isGoogleConfigured,
+} from "../providers/google/auth.js";
+import { INDEXNOW_SETUP_GUIDE, isIndexNowConfigured } from "../providers/indexnow/provider.js";
+import { READ_ONLY, withErrorBoundary } from "./shared.js";
 
-export function registerEngineStatusTool(server: McpServer) {
-  server.tool(
+export interface EngineStatus {
+  readonly name: string;
+  readonly id: string;
+  readonly configured: boolean;
+  readonly authMethod: string;
+  readonly guide: string;
+}
+
+function collectStatuses(): EngineStatus[] {
+  const queryEngines = Object.values(providers).map((provider) => ({
+    name: provider.displayName,
+    id: provider.engine,
+    configured: provider.isConfigured(),
+    authMethod: provider.authMethod,
+    guide: provider.getConfigurationGuide(),
+  }));
+  return [
+    ...queryEngines,
+    {
+      name: "IndexNow (Instant Indexing)",
+      id: "indexnow",
+      configured: isIndexNowConfigured(),
+      authMethod: "API Key (INDEXNOW_KEY)",
+      guide: INDEXNOW_SETUP_GUIDE,
+    },
+    {
+      name: "Google Indexing API (JobPosting/BroadcastEvent, 200/day)",
+      id: "google-indexing",
+      configured: isGoogleConfigured(),
+      authMethod: "Service Account JSON + Indexing API enabled",
+      guide: GOOGLE_INDEXING_SETUP_GUIDE,
+    },
+  ];
+}
+
+export function renderEngineStatus(statuses: readonly EngineStatus[]): string {
+  const table = markdownTable(
+    ["Provider", "Engine", "Status", "Auth Method"],
+    statuses.map((s) => [
+      s.name,
+      code(s.id),
+      s.configured ? "✅ Connected" : "❌ Not Configured",
+      s.authMethod,
+    ]),
+  );
+  const missing = statuses.filter((s) => !s.configured);
+  const footer =
+    missing.length === 0
+      ? ["🎉 All search engine providers are properly configured and ready!"]
+      : [
+          "#### Setup Guides for Inactive Providers:\n",
+          ...missing.map((s) => `**${s.name}:**\n${s.guide}\n`),
+        ];
+  return ["### Search Engine Provider Status\n", table, "", ...footer].join("\n");
+}
+
+export function registerEngineStatusTool(server: McpServer): void {
+  server.registerTool(
     "engine_status",
-    "Check the configuration and connection status of all integrated search engine providers (Google Search Console, Bing Webmaster Tools, IndexNow).",
-    {},
-    async () => {
-      const providers = registry.getAll();
-      const lines: string[] = [];
-
-      lines.push("### Search Engine Provider Status\n");
-      lines.push("| Provider | Engine | Status | Auth Method |");
-      lines.push("| --- | --- | --- | --- |");
-
-      for (const p of providers) {
-        const configured = p.isConfigured();
-        const statusBadge = configured ? "✅ Connected" : "❌ Not Configured";
-        const authMethod =
-          p.engine === "google"
-            ? "Service Account JSON / ADC"
-            : p.engine === "bing"
-            ? "API Key (BING_WEBMASTER_API_KEY)"
-            : "Unknown";
-
-        lines.push(`| ${p.displayName} | \`${p.engine}\` | ${statusBadge} | ${authMethod} |`);
-      }
-
-      const indexNowStatus = isIndexNowConfigured() ? "✅ Connected" : "❌ Not Configured";
-      lines.push(
-        `| IndexNow (Instant Indexing) | \`indexnow\` | ${indexNowStatus} | API Key (INDEXNOW_KEY) |`
-      );
-
-      lines.push("");
-
-      // Provide setup tips for unconfigured engines
-      const unconfigured = providers.filter((p) => !p.isConfigured());
-      if (unconfigured.length > 0 || !isIndexNowConfigured()) {
-        lines.push("#### Setup Guides for Inactive Providers:\n");
-        for (const p of unconfigured) {
-          lines.push(`**${p.displayName}:**`);
-          lines.push(p.getConfigurationGuide());
-          lines.push("");
-        }
-        if (!isIndexNowConfigured()) {
-          lines.push("**IndexNow:**");
-          lines.push(getIndexNowConfigurationGuide());
-          lines.push("");
-        }
-      } else {
-        lines.push("🎉 All search engine providers are properly configured and ready!");
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: lines.join("\n"),
-          },
-        ],
-      };
-    }
+    {
+      title: "Engine Status",
+      description:
+        "Check the configuration and connection status of all integrated search engine providers (Google Search Console, Google Indexing API, Bing Webmaster Tools, IndexNow).",
+      inputSchema: {},
+      annotations: READ_ONLY,
+    },
+    withErrorBoundary("Error checking engine status", async () => {
+      await detectGoogleCredentials();
+      return okText(renderEngineStatus(collectStatuses()));
+    }),
   );
 }
